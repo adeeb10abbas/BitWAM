@@ -66,7 +66,7 @@ check_dependencies() {
 # Install 1bit_vla in development mode
 install_package() {
     print_header "Installing 1bit_vla Package"
-    pip install -e . || {
+    pip install --user -e . || {
         print_error "Failed to install 1bit_vla package"
         exit 1
     }
@@ -119,7 +119,7 @@ run_with_wandb() {
     # Check if wandb is available
     python -c "import wandb" 2>/dev/null || {
         print_warning "W&B not installed. Installing..."
-        pip install wandb
+        pip install --user wandb
     }
     
     python scripts/train_with_lerobot.py \
@@ -194,9 +194,21 @@ except Exception as e:
 
 # Run speed benchmark
 run_speed_benchmark() {
-    local device=${1:-"cpu"}
+    local device=${1:-"auto"}
     
-    print_header "Running Speed Benchmark"
+    # Auto-detect device if not specified
+    if [ "$device" = "auto" ]; then
+        gpu_available=$(python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "false")
+        if [ "$gpu_available" = "True" ]; then
+            device="cuda"
+            print_success "Auto-detected CUDA GPU, using GPU for benchmark"
+        else
+            device="cpu"
+            print_warning "No CUDA GPU detected, using CPU for benchmark"
+        fi
+    fi
+    
+    print_header "Running Speed Benchmark on $device"
     print_warning "This will measure inference speed on $device"
     
     python examples/speed_benchmark.py \
@@ -214,13 +226,27 @@ run_speed_benchmark() {
 run_speed_comparison() {
     print_header "Running Speed Comparison on Multiple Datasets"
     
+    # Check if CUDA is available
+    gpu_available=$(python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "false")
+    
+    if [ "$gpu_available" = "True" ]; then
+        print_success "CUDA GPU detected! Will test both CPU and GPU performance"
+        devices=("cpu" "cuda")
+    else
+        print_warning "No CUDA GPU detected, testing CPU only"
+        devices=("cpu")
+    fi
+    
     datasets=("lerobot/pusht")
     
     for dataset in "${datasets[@]}"; do
         echo -e "\n${YELLOW}Speed testing $dataset...${NC}"
         
-        # Create a temporary script to test speed with dataset
-        cat > temp_speed_test.py << EOF
+        for device in "${devices[@]}"; do
+            echo -e "${BLUE}Testing on $device...${NC}"
+            
+            # Create a temporary script to test speed with dataset
+            cat > temp_speed_test.py << EOF
 import sys
 sys.path.append('src')
 sys.path.append('../lerobot')
@@ -229,52 +255,125 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 from bit_vla import BitACTPolicy, BitACTConfig
 import torch
 import time
+import gc
 
-# Load dataset to get dimensions
-dataset = LeRobotDataset("$dataset", video_backend="pyav")
-sample = dataset[0]
-obs_dim = sample["observation.state"].flatten().shape[0]
+# Force cleanup
+gc.collect()
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
 
 print(f"Dataset: $dataset")
-print(f"Observation dimension: {obs_dim}")
+print(f"Device: $device")
 
-# Quick speed test
-device = torch.device("cpu")
-config = BitACTConfig(action_dim=2, use_bitnet=True)
-model = BitACTPolicy(config, observation_dim=obs_dim).to(device)
+# Load dataset to get dimensions
+try:
+    dataset = LeRobotDataset("$dataset", video_backend="pyav")
+    sample = dataset[0]
+    obs_dim = sample["observation.state"].flatten().shape[0]
+    action_dim = sample["action"].shape[-1] if sample["action"].dim() > 0 else 2
+    print(f"Observation dimension: {obs_dim}")
+    print(f"Action dimension: {action_dim}")
+except Exception as e:
+    print(f"Error loading dataset: {e}")
+    exit(1)
 
-# Time single inference
-model.eval()
-dummy_input = torch.randn(1, obs_dim, device=device)
+# Test both BitNet and standard models
+configs = [
+    ("BitNet", BitACTConfig(action_dim=action_dim, use_bitnet=True)),
+    ("Standard", BitACTConfig(action_dim=action_dim, use_bitnet=False))
+]
 
-with torch.no_grad():
-    # Warmup
-    for _ in range(10):
-        _ = model(dummy_input)
+device_torch = torch.device("$device")
+print(f"PyTorch device: {device_torch}")
+
+for model_name, config in configs:
+    print(f"\n--- {model_name} Model ---")
     
-    # Time it
-    times = []
-    for _ in range(100):
-        start = time.perf_counter()
-        _ = model(dummy_input)
-        end = time.perf_counter()
-        times.append((end - start) * 1000)
-
-mean_time = sum(times) / len(times)
-print(f"Average inference time: {mean_time:.2f}ms")
-print(f"Max frequency: {1000/mean_time:.1f}Hz")
-EOF
+    try:
+        model = BitACTPolicy(config, observation_dim=obs_dim).to(device_torch)
+        model.eval()
         
-        python temp_speed_test.py || {
-            print_warning "Speed test failed for $dataset, continuing..."
-            continue
-        }
+        # Model size info
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        print(f"Total parameters: {total_params:,}")
+        print(f"Trainable parameters: {trainable_params:,}")
+        
+        # Memory usage (for GPU)
+        if device_torch.type == "cuda":
+            torch.cuda.synchronize()
+            memory_before = torch.cuda.memory_allocated()
+        
+        # Create test inputs
+        batch_sizes = [1, 8, 32]
+        
+        for batch_size in batch_sizes:
+            dummy_input = torch.randn(batch_size, obs_dim, device=device_torch)
+            
+            with torch.no_grad():
+                # Warmup
+                for _ in range(10):
+                    _ = model(dummy_input)
+                
+                if device_torch.type == "cuda":
+                    torch.cuda.synchronize()
+                
+                # Time it
+                times = []
+                for _ in range(100):
+                    if device_torch.type == "cuda":
+                        torch.cuda.synchronize()
+                    start = time.perf_counter()
+                    output = model(dummy_input)
+                    if device_torch.type == "cuda":
+                        torch.cuda.synchronize()
+                    end = time.perf_counter()
+                    times.append((end - start) * 1000)
+            
+            mean_time = sum(times) / len(times)
+            std_time = (sum((t - mean_time)**2 for t in times) / len(times))**0.5
+            throughput = batch_size * 1000 / mean_time
+            
+            print(f"Batch size {batch_size}: {mean_time:.2f}±{std_time:.2f}ms, {throughput:.1f} samples/s")
+        
+        # Memory usage (for GPU)
+        if device_torch.type == "cuda":
+            memory_after = torch.cuda.memory_allocated()
+            memory_used = (memory_after - memory_before) / 1024**2  # MB
+            print(f"GPU memory used: {memory_used:.1f} MB")
+        
+        # Clean up
+        del model
+        if device_torch.type == "cuda":
+            torch.cuda.empty_cache()
+        
+    except Exception as e:
+        print(f"Error testing {model_name}: {e}")
+        continue
+
+print(f"\n✅ Speed test completed for $dataset on $device")
+EOF
+            
+            python temp_speed_test.py || {
+                print_warning "Speed test failed for $dataset on $device, continuing..."
+                continue
+            }
+            
+            echo ""  # Add spacing between devices
+        done
         
         rm -f temp_speed_test.py
         print_success "Completed $dataset"
     done
     
-    print_success "Speed comparison completed!"
+    # Summary message
+    if [ "$gpu_available" = "True" ]; then
+        print_success "Speed comparison completed on CPU and GPU!"
+        echo -e "${BLUE}💡 GPU should show significant speedup for larger batch sizes${NC}"
+    else
+        print_success "Speed comparison completed on CPU!"
+        echo -e "${YELLOW}💡 Install CUDA PyTorch for GPU acceleration: pip install torch --index-url https://download.pytorch.org/whl/cu121${NC}"
+    fi
 }
 
 # Show usage information
@@ -290,8 +389,9 @@ show_usage() {
     echo "  sweep                          - Quick test on multiple datasets"
     echo "  analyze                        - Analyze existing results"
     echo "  all                            - Run setup + basic + compare"
-    echo "  speed [device]                 - Run speed benchmark (default: cpu)"
+    echo "  speed [device]                 - Run speed benchmark (default: auto)"
     echo "  speed_comparison               - Run speed comparison on multiple datasets"
+    echo "  cuda_optimize                  - Test CUDA optimizations for BitNet"
     echo ""
     echo -e "${BLUE}Examples:${NC}"
     echo "  ./run_lerobot_examples.sh setup"
@@ -299,8 +399,11 @@ show_usage() {
     echo "  ./run_lerobot_examples.sh compare lerobot/aloha_static_coffee 10"
     echo "  ./run_lerobot_examples.sh wandb lerobot/pusht"
     echo "  ./run_lerobot_examples.sh all"
-    echo "  ./run_lerobot_examples.sh speed cpu"
-    echo "  ./run_lerobot_examples.sh speed_comparison"
+    echo "  ./run_lerobot_examples.sh speed                    # Auto-detect GPU/CPU"
+    echo "  ./run_lerobot_examples.sh speed cuda               # Force GPU"
+    echo "  ./run_lerobot_examples.sh speed cpu                # Force CPU"
+    echo "  ./run_lerobot_examples.sh speed_comparison         # Test both CPU and GPU if available"
+    echo "  ./run_lerobot_examples.sh cuda_optimize            # Test CUDA optimizations for BitNet"
 }
 
 # Main command handling
@@ -342,6 +445,26 @@ case ${1:-help} in
     "speed_comparison")
         check_dependencies
         run_speed_comparison
+        ;;
+    "cuda_optimize")
+        check_dependencies
+        print_header "Testing CUDA Optimizations for BitNet"
+        
+        # Check if CUDA is available
+        gpu_available=$(python -c "import torch; print(torch.cuda.is_available())" 2>/dev/null || echo "false")
+        
+        if [ "$gpu_available" = "True" ]; then
+            print_success "CUDA GPU detected! Running optimization tests..."
+            python test_cuda_optimizations.py || {
+                print_error "CUDA optimization tests failed"
+                exit 1
+            }
+            print_success "CUDA optimization tests completed!"
+        else
+            print_error "No CUDA GPU detected. These tests require a GPU."
+            print_warning "Install CUDA PyTorch: pip install torch --index-url https://download.pytorch.org/whl/cu121"
+            exit 1
+        fi
         ;;
     "help"|*)
         show_usage

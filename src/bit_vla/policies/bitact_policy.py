@@ -8,9 +8,11 @@ independently of the LeRobot framework for research purposes.
 import torch
 import torch.nn as nn
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Dict
 
 from ..models.bitlinear import BitLinear
+from ..models.cuda_optimized_bitlinear import CudaOptimizedBitLinear, optimize_for_inference
+from ..models.fast_bitlinear import create_optimized_bitlinear
 
 
 @dataclass
@@ -34,21 +36,25 @@ class BitACTConfig:
     
     # Training
     training_mode: str = "native_1bit"
-    bitnet_lr_schedule: dict = field(default_factory=lambda: {
-        "stage1_steps": 6000,
+    bitnet_lr_schedule: Dict[str, float] = field(default_factory=lambda: {
         "stage1_lr": 1e-3,
-        "stage2_lr": 1e-4,
-        "warmup_steps": 500,
+        "stage2_lr": 1e-4, 
+        "stage1_steps": 1000,
+        "warmup_steps": 100,
     })
     
     # VAE settings
     use_vae: bool = True
     latent_dim: int = 32
-    kl_weight: float = 10.0
+    kl_weight: float = 1.0
     
     # Action settings
     n_action_steps: int = 8
     action_dim: int = 7
+    
+    # BitNet configuration
+    cuda_optimized: bool = True  # Use CUDA-optimized BitLinear when available
+    performance_mode: str = "ultra_fast"  # "standard", "fast", "ultra_fast"
     
     def validate_bitnet_config(self):
         """Validate BitNet-specific configuration parameters."""
@@ -127,8 +133,39 @@ class BitACTPolicy(nn.Module):
         super().__init__()
         self.config = config
         
-        # Input projection
-        self.obs_projection = nn.Linear(observation_dim, config.dim_model)
+        # Create feature extractor based on config
+        if config.use_bitnet:
+            # Choose BitLinear implementation based on performance mode
+            if config.performance_mode in ["fast", "ultra_fast"] and torch.cuda.is_available():
+                # Use the new fast implementations
+                BitLinearLayer = lambda in_f, out_f: create_optimized_bitlinear(
+                    in_f, out_f, optimization_level=config.performance_mode
+                )
+                print(f"🚀 Using {config.performance_mode} optimized BitLinear layers")
+            elif config.cuda_optimized and torch.cuda.is_available():
+                BitLinearLayer = CudaOptimizedBitLinear
+                print("🚀 Using CUDA-optimized BitLinear layers")
+            else:
+                BitLinearLayer = BitLinear
+                print("📦 Using standard BitLinear layers")
+                
+            self.feature_extractor = nn.Sequential(
+                BitLinearLayer(observation_dim, config.dim_model),
+                nn.LayerNorm(config.dim_model),
+                nn.ReLU(),
+                BitLinearLayer(config.dim_model, config.dim_model),
+                nn.LayerNorm(config.dim_model),
+                nn.ReLU(),
+            )
+        else:
+            self.feature_extractor = nn.Sequential(
+                nn.Linear(observation_dim, config.dim_model),
+                nn.LayerNorm(config.dim_model),
+                nn.ReLU(),
+                nn.Linear(config.dim_model, config.dim_model),
+                nn.LayerNorm(config.dim_model),
+                nn.ReLU(),
+            )
         
         # Positional encoding for action chunks
         self.pos_encoding = nn.Parameter(
@@ -177,7 +214,7 @@ class BitACTPolicy(nn.Module):
     def encode_observations(self, observations: torch.Tensor) -> torch.Tensor:
         """Encode observations through transformer encoder."""
         # Project observations to model dimension
-        x = self.obs_projection(observations)  # [batch, dim_model]
+        x = self.feature_extractor(observations)  # [batch, dim_model]
         x = x.unsqueeze(1)  # [batch, 1, dim_model]
         
         # Pass through encoder layers
@@ -303,4 +340,44 @@ class BitACTPolicy(nn.Module):
                     bitlinear_params * 0.2 + fp16_params * 4
                 ) / 1024**2,
             }
-        } 
+        }
+    
+    def optimize_for_inference(self):
+        """
+        Optimize the model for GPU inference performance.
+        
+        This method applies various optimizations including:
+        - Enabling CUDA optimizations (TensorFloat-32, etc.)
+        - Weight caching for quantized models
+        - Memory optimization
+        """
+        if torch.cuda.is_available() and self.config.cuda_optimized:
+            print("🚀 Applying GPU inference optimizations...")
+            
+            # Enable CUDA optimizations
+            torch.backends.cudnn.allow_tf32 = True
+            torch.backends.cuda.matmul.allow_tf32 = True
+            
+            # Enable memory optimizations
+            torch.cuda.empty_cache()
+            
+            # Cache quantized weights for BitNet layers
+            self.eval()
+            with torch.no_grad():
+                # Trigger weight caching by doing a forward pass
+                dummy_input = torch.randn(1, self.feature_extractor[0].in_features, device=next(self.parameters()).device)
+                _ = self.feature_extractor(dummy_input)
+            
+            print("✅ GPU optimizations applied")
+            
+            # Try to apply torch.jit optimizations
+            try:
+                optimized_model = optimize_for_inference(self)
+                print("✅ Additional JIT optimizations applied")
+                return optimized_model
+            except Exception as e:
+                print(f"⚠️  JIT optimization failed: {e}")
+                return self
+        else:
+            print("ℹ️  GPU not available or CUDA optimization disabled")
+            return self 

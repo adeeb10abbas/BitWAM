@@ -47,6 +47,7 @@ from bit_vla import (
     VLABitNet, BitACTPolicy, BitACTConfig, VLATrainer, 
     print_model_info, analyze_quantization
 )
+from bit_vla.training import BitNetOptimizer
 
 
 def setup_logging(output_dir: Path) -> None:
@@ -212,6 +213,63 @@ def create_data_collator(model_type: str):
     return collate_fn
 
 
+def normalize_actions(actions: torch.Tensor) -> torch.Tensor:
+    """
+    Normalize actions to prevent extremely high loss values.
+    
+    Args:
+        actions: Action tensor of any shape
+        
+    Returns:
+        Normalized actions in range [-1, 1]
+    """
+    # Clip extreme values first
+    actions = torch.clamp(actions, -1000, 1000)
+    
+    # Get batch-wise statistics to maintain gradients
+    batch_size = actions.shape[0]
+    flattened = actions.view(batch_size, -1)
+    
+    # Compute min/max per batch
+    action_min = flattened.min(dim=1, keepdim=True)[0]
+    action_max = flattened.max(dim=1, keepdim=True)[0]
+    
+    # Avoid division by zero
+    action_range = action_max - action_min
+    action_range = torch.clamp(action_range, min=1e-6)
+    
+    # Normalize to [-1, 1] per batch
+    normalized = 2 * (flattened - action_min) / action_range - 1
+    
+    # Reshape back to original shape
+    return normalized.view_as(actions)
+
+
+def robust_action_loss(predicted: torch.Tensor, target: torch.Tensor, loss_type: str = "huber") -> torch.Tensor:
+    """
+    Compute robust action loss with normalization.
+    
+    Args:
+        predicted: Predicted actions
+        target: Target actions  
+        loss_type: "mse", "huber", or "mae"
+        
+    Returns:
+        Computed loss
+    """
+    # Normalize both predictions and targets
+    pred_norm = normalize_actions(predicted)
+    target_norm = normalize_actions(target)
+    
+    if loss_type == "huber":
+        # Huber loss is more robust to outliers
+        return nn.HuberLoss(delta=1.0)(pred_norm, target_norm)
+    elif loss_type == "mae":
+        return nn.L1Loss()(pred_norm, target_norm)
+    else:
+        return nn.MSELoss()(pred_norm, target_norm)
+
+
 def train_epoch(
     model: nn.Module,
     dataloader: DataLoader, 
@@ -219,17 +277,27 @@ def train_epoch(
     device: torch.device,
     model_type: str,
     epoch: int,
-    log_freq: int = 100,
+    total_steps: int,
+    is_bitnet_optimizer: bool,
+    loss_type: str = "huber",
 ) -> Dict[str, float]:
     """Train for one epoch."""
     
     model.train()
     epoch_loss = 0.0
+    epoch_action_loss = 0.0
+    epoch_kl_loss = 0.0
     num_batches = 0
     
     pbar = tqdm(dataloader, desc=f"Epoch {epoch}")
     
     for batch_idx, batch in enumerate(pbar):
+        current_step = total_steps + batch_idx
+        
+        # Update learning rate for BitNet optimizer
+        if is_bitnet_optimizer:
+            optimizer.step_lr_schedule(current_step)
+        
         # Move batch to device
         batch = {
             k: v.to(device) if isinstance(v, torch.Tensor) else v 
@@ -253,14 +321,47 @@ def train_epoch(
                 
                 # Get actions
                 actions = batch["action"]
-                if actions.dim() > 2:
-                    actions = actions.flatten(1)
                 
                 # BitACT forward
                 predicted_actions = model(observations)
                 
-                # Compute loss
-                loss = nn.MSELoss()(predicted_actions, actions)
+                # Ensure shapes match for loss computation
+                if predicted_actions.dim() == 3 and actions.dim() == 3:
+                    # Both are [batch, seq, action_dim] - keep as is
+                    pass
+                elif predicted_actions.dim() == 2 and actions.dim() == 3:
+                    # Predicted is [batch, action_dim], actions is [batch, seq, action_dim]
+                    # Take last action from sequence
+                    actions = actions[:, -1]
+                elif predicted_actions.dim() == 3 and actions.dim() == 2:
+                    # Predicted is [batch, seq, action_dim], actions is [batch, action_dim]
+                    # Replicate action across sequence
+                    actions = actions.unsqueeze(1).expand(-1, predicted_actions.shape[1], -1)
+                else:
+                    # Flatten both if shapes are incompatible
+                    if actions.dim() > 2:
+                        actions = actions.flatten(1)
+                    if predicted_actions.dim() > 2:
+                        predicted_actions = predicted_actions.flatten(1)
+                
+                # Compute action loss
+                action_loss = robust_action_loss(predicted_actions, actions, loss_type)
+                
+                # Compute VAE loss if model uses VAE
+                kl_loss = torch.tensor(0.0, device=device)
+                if hasattr(model, 'config') and model.config.use_vae:
+                    # Get VAE components from model
+                    encoded_obs = model.encode_observations(observations)
+                    mu = model.mu_head(encoded_obs)
+                    log_sigma_x2 = model.log_sigma_x2_head(encoded_obs)
+                    
+                    # Compute KL divergence: KL(q(z|x) || p(z)) where p(z) = N(0,I)
+                    kl_loss = -0.5 * torch.sum(1 + log_sigma_x2 - mu.pow(2) - log_sigma_x2.exp())
+                    kl_loss = kl_loss / mu.shape[0]  # Normalize by batch size
+                    kl_loss = model.config.kl_weight * kl_loss
+                
+                # Total loss
+                loss = action_loss + kl_loss
                 
             elif model_type == "vla_bitnet":
                 # For VLA models, handle images and language
@@ -289,39 +390,91 @@ def train_epoch(
                 predicted_actions = model(images, tokens)
                 
                 # Compute loss
-                loss = nn.MSELoss()(predicted_actions, actions)
+                action_loss = robust_action_loss(predicted_actions, actions, loss_type)
+                kl_loss = torch.tensor(0.0, device=device)
+                loss = action_loss
             
             else:
                 raise ValueError(f"Unknown model type: {model_type}")
             
             # Backward pass
-            optimizer.zero_grad()
-            loss.backward()
-            
-            # Gradient clipping
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            
-            optimizer.step()
+            if is_bitnet_optimizer:
+                # Use BitNet optimizer's step method
+                optimizer.step(loss)
+            else:
+                # Standard backward pass
+                optimizer.zero_grad()
+                loss.backward()
+                
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                
+                optimizer.step()
             
             # Update metrics
             epoch_loss += loss.item()
+            epoch_action_loss += action_loss.item()
+            epoch_kl_loss += kl_loss.item() if isinstance(kl_loss, torch.Tensor) else 0.0
             num_batches += 1
             
-            # Update progress bar
-            pbar.set_postfix({"loss": f"{loss.item():.4f}"})
+            # Update progress bar with more detailed info
+            if model_type == "bitact" and hasattr(model, 'config') and model.config.use_vae:
+                pbar.set_postfix({
+                    "total_loss": f"{loss.item():.4f}",
+                    "action_loss": f"{action_loss.item():.4f}",
+                    "kl_loss": f"{kl_loss.item():.4f}"
+                })
+            else:
+                pbar.set_postfix({"loss": f"{loss.item():.4f}"})
             
             # Log frequently
-            if batch_idx % log_freq == 0:
-                logging.info(
-                    f"Epoch {epoch}, Batch {batch_idx}: Loss = {loss.item():.4f}"
-                )
+            if batch_idx % 100 == 0:
+                # Log action statistics for monitoring
+                action_stats = {
+                    "action_min": actions.min().item(),
+                    "action_max": actions.max().item(), 
+                    "action_mean": actions.mean().item(),
+                    "action_std": actions.std().item(),
+                    "pred_min": predicted_actions.min().item(),
+                    "pred_max": predicted_actions.max().item(),
+                }
+                
+                if model_type == "bitact" and hasattr(model, 'config') and model.config.use_vae:
+                    logging.info(
+                        f"Epoch {epoch}, Batch {batch_idx}: Total Loss = {loss.item():.4f}, "
+                        f"Action Loss = {action_loss.item():.4f}, KL Loss = {kl_loss.item():.4f}"
+                    )
+                    logging.info(
+                        f"Action Stats: min={action_stats['action_min']:.2f}, max={action_stats['action_max']:.2f}, "
+                        f"std={action_stats['action_std']:.2f}"
+                    )
+                else:
+                    logging.info(
+                        f"Epoch {epoch}, Batch {batch_idx}: Loss = {loss.item():.4f}"
+                    )
+                    logging.info(
+                        f"Action Stats: min={action_stats['action_min']:.2f}, max={action_stats['action_max']:.2f}, "
+                        f"std={action_stats['action_std']:.2f}"
+                    )
                 
                 if wandb.run is not None:
-                    wandb.log({
+                    log_dict = {
                         "batch_loss": loss.item(),
+                        "batch_action_loss": action_loss.item(),
                         "epoch": epoch,
                         "batch": batch_idx,
-                    })
+                        "total_steps": total_steps + batch_idx,
+                    }
+                    if isinstance(kl_loss, torch.Tensor):
+                        log_dict["batch_kl_loss"] = kl_loss.item()
+                    
+                    # Add BitNet-specific metrics
+                    if is_bitnet_optimizer:
+                        lr_info = optimizer.get_lr_info()
+                        log_dict["lr_stage"] = lr_info["current_stage"]
+                        log_dict["current_step"] = lr_info["current_step"]
+                        
+                    wandb.log(log_dict)
         
         except Exception as e:
             logging.error(f"Error in batch {batch_idx}: {str(e)}")
@@ -329,9 +482,13 @@ def train_epoch(
             raise e
     
     avg_loss = epoch_loss / num_batches if num_batches > 0 else 0.0
+    avg_action_loss = epoch_action_loss / num_batches if num_batches > 0 else 0.0
+    avg_kl_loss = epoch_kl_loss / num_batches if num_batches > 0 else 0.0
     
     return {
         "avg_loss": avg_loss,
+        "avg_action_loss": avg_action_loss,
+        "avg_kl_loss": avg_kl_loss,
         "num_batches": num_batches,
     }
 
@@ -341,11 +498,14 @@ def evaluate_model(
     dataloader: DataLoader,
     device: torch.device,
     model_type: str,
+    loss_type: str = "huber",
 ) -> Dict[str, float]:
     """Evaluate model performance."""
     
     model.eval()
     total_loss = 0.0
+    total_action_loss = 0.0
+    total_kl_loss = 0.0
     num_batches = 0
     
     with torch.no_grad():
@@ -369,11 +529,46 @@ def evaluate_model(
                             observations = observations.flatten(1)
                     
                     actions = batch["action"]
-                    if actions.dim() > 2:
-                        actions = actions.flatten(1)
                     
                     predicted_actions = model(observations)
-                    loss = nn.MSELoss()(predicted_actions, actions)
+                    
+                    # Ensure shapes match for loss computation
+                    if predicted_actions.dim() == 3 and actions.dim() == 3:
+                        # Both are [batch, seq, action_dim] - keep as is
+                        pass
+                    elif predicted_actions.dim() == 2 and actions.dim() == 3:
+                        # Predicted is [batch, action_dim], actions is [batch, seq, action_dim]
+                        # Take last action from sequence
+                        actions = actions[:, -1]
+                    elif predicted_actions.dim() == 3 and actions.dim() == 2:
+                        # Predicted is [batch, seq, action_dim], actions is [batch, action_dim]
+                        # Replicate action across sequence
+                        actions = actions.unsqueeze(1).expand(-1, predicted_actions.shape[1], -1)
+                    else:
+                        # Flatten both if shapes are incompatible
+                        if actions.dim() > 2:
+                            actions = actions.flatten(1)
+                        if predicted_actions.dim() > 2:
+                            predicted_actions = predicted_actions.flatten(1)
+                    
+                    # Compute action loss
+                    action_loss = robust_action_loss(predicted_actions, actions, loss_type)
+                    
+                    # Compute VAE loss if model uses VAE
+                    kl_loss = torch.tensor(0.0, device=device)
+                    if hasattr(model, 'config') and model.config.use_vae:
+                        # Get VAE components from model
+                        encoded_obs = model.encode_observations(observations)
+                        mu = model.mu_head(encoded_obs)
+                        log_sigma_x2 = model.log_sigma_x2_head(encoded_obs)
+                        
+                        # Compute KL divergence: KL(q(z|x) || p(z)) where p(z) = N(0,I)
+                        kl_loss = -0.5 * torch.sum(1 + log_sigma_x2 - mu.pow(2) - log_sigma_x2.exp())
+                        kl_loss = kl_loss / mu.shape[0]  # Normalize by batch size
+                        kl_loss = model.config.kl_weight * kl_loss
+                    
+                    # Total loss
+                    loss = action_loss + kl_loss
                     
                 elif model_type == "vla_bitnet":
                     images = None
@@ -395,9 +590,13 @@ def evaluate_model(
                         actions = actions[:, -1]
                     
                     predicted_actions = model(images, tokens)
-                    loss = nn.MSELoss()(predicted_actions, actions)
+                    action_loss = robust_action_loss(predicted_actions, actions, loss_type)
+                    kl_loss = torch.tensor(0.0, device=device)
+                    loss = action_loss
                 
                 total_loss += loss.item()
+                total_action_loss += action_loss.item()
+                total_kl_loss += kl_loss.item() if isinstance(kl_loss, torch.Tensor) else 0.0
                 num_batches += 1
                 
             except Exception as e:
@@ -405,9 +604,13 @@ def evaluate_model(
                 continue
     
     avg_loss = total_loss / num_batches if num_batches > 0 else float('inf')
+    avg_action_loss = total_action_loss / num_batches if num_batches > 0 else float('inf')
+    avg_kl_loss = total_kl_loss / num_batches if num_batches > 0 else 0.0
     
     return {
         "eval_loss": avg_loss,
+        "eval_action_loss": avg_action_loss,
+        "eval_kl_loss": avg_kl_loss,
         "num_eval_batches": num_batches,
     }
 
@@ -541,10 +744,28 @@ def train_model(
     )
     
     # Optimizer setup
-    if hasattr(model, 'get_optim_params') and args.use_bitnet:
-        # Use BitNet-specific optimizer settings
+    if hasattr(model, 'config') and model.config.use_bitnet and args.use_bitnet:
+        # Use BitNet-specific optimizer with two-stage learning rate schedule
+        lr_schedule = model.config.bitnet_lr_schedule
+        optimizer = BitNetOptimizer(
+            model,
+            stage1_lr=lr_schedule["stage1_lr"],
+            stage2_lr=lr_schedule["stage2_lr"],
+            stage1_steps=lr_schedule["stage1_steps"],
+            warmup_steps=lr_schedule["warmup_steps"],
+            weight_decay=0.1,
+        )
+        logging.info(f"Using BitNet optimizer with two-stage LR schedule: "
+                    f"Stage1={lr_schedule['stage1_lr']}, Stage2={lr_schedule['stage2_lr']}, "
+                    f"Transition at step {lr_schedule['stage1_steps']}")
+    elif hasattr(model, 'get_optim_params') and args.use_bitnet:
+        # Use BitNet-specific parameter groups with standard optimizer
         param_groups = model.get_optim_params()
-        optimizer = torch.optim.AdamW(param_groups)
+        optimizer = torch.optim.AdamW(
+            param_groups,
+            lr=args.learning_rate or dataset_info["suggested_lr"],
+            weight_decay=1e-5,
+        )
     else:
         # Standard optimizer
         optimizer = torch.optim.AdamW(
@@ -557,32 +778,65 @@ def train_model(
     best_val_loss = float('inf')
     train_losses = []
     val_losses = []
+    total_steps = 0
+    is_bitnet_optimizer = isinstance(optimizer, BitNetOptimizer)
     
     logging.info(f"Starting training for {model_name}...")
     
     for epoch in range(args.num_epochs):
         # Train
         train_metrics = train_epoch(
-            model, train_loader, optimizer, device, model_type, epoch
+            model, train_loader, optimizer, device, model_type, epoch, total_steps, is_bitnet_optimizer, args.loss_type
         )
         train_losses.append(train_metrics["avg_loss"])
+        total_steps += train_metrics["num_batches"]
         
         # Validate
-        val_metrics = evaluate_model(model, val_loader, device, model_type)
+        val_metrics = evaluate_model(model, val_loader, device, model_type, args.loss_type)
         val_losses.append(val_metrics["eval_loss"])
         
-        # Log metrics
-        logging.info(
-            f"Epoch {epoch}: Train Loss = {train_metrics['avg_loss']:.4f}, "
-            f"Val Loss = {val_metrics['eval_loss']:.4f}"
-        )
+        # Log metrics with more detail for BitACT models
+        if hasattr(model, 'config') and model.config.use_vae:
+            logging.info(
+                f"Epoch {epoch}: Train Loss = {train_metrics['avg_loss']:.4f} "
+                f"(Action: {train_metrics['avg_action_loss']:.4f}, KL: {train_metrics['avg_kl_loss']:.4f}), "
+                f"Val Loss = {val_metrics['eval_loss']:.4f}"
+            )
+        else:
+            logging.info(
+                f"Epoch {epoch}: Train Loss = {train_metrics['avg_loss']:.4f}, "
+                f"Val Loss = {val_metrics['eval_loss']:.4f}"
+            )
+        
+        # Log learning rate info for BitNet optimizer
+        if is_bitnet_optimizer:
+            lr_info = optimizer.get_lr_info()
+            logging.info(f"LR Info: Stage {lr_info['current_stage']}, Step {lr_info['current_step']}")
         
         if wandb.run is not None:
-            wandb.log({
+            log_dict = {
                 f"{model_name}/train_loss": train_metrics["avg_loss"],
                 f"{model_name}/val_loss": val_metrics["eval_loss"],
                 f"{model_name}/epoch": epoch,
-            })
+                f"{model_name}/total_steps": total_steps,
+            }
+            
+            # Add VAE-specific metrics if available
+            if hasattr(model, 'config') and model.config.use_vae:
+                log_dict.update({
+                    f"{model_name}/train_action_loss": train_metrics["avg_action_loss"],
+                    f"{model_name}/train_kl_loss": train_metrics["avg_kl_loss"],
+                    f"{model_name}/val_action_loss": val_metrics["eval_action_loss"],
+                    f"{model_name}/val_kl_loss": val_metrics["eval_kl_loss"],
+                })
+            
+            # Add BitNet optimizer info
+            if is_bitnet_optimizer:
+                lr_info = optimizer.get_lr_info()
+                log_dict[f"{model_name}/lr_stage"] = lr_info["current_stage"]
+                log_dict[f"{model_name}/lr_step"] = lr_info["current_step"]
+                
+            wandb.log(log_dict)
         
         # Save best model
         if val_metrics["eval_loss"] < best_val_loss:
@@ -719,6 +973,8 @@ def main():
     parser.add_argument("--num_epochs", type=int, default=10, help="Number of training epochs")
     parser.add_argument("--batch_size", type=int, help="Batch size (default: auto-detect)")
     parser.add_argument("--learning_rate", type=float, help="Learning rate (default: auto-detect)")
+    parser.add_argument("--loss_type", type=str, choices=["mse", "huber", "mae"], default="huber", 
+                       help="Loss function type (default: huber for robustness)")
     
     # Output and logging
     parser.add_argument(

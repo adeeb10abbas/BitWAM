@@ -18,7 +18,8 @@ __version__ = "0.1.0"
 __author__ = "Ali Adeeb"
 
 # Core model imports
-from .models.vla_bitnet import VLABitNet, BitLinear
+from .models.vla_bitnet import VLABitNet, VLABitNetConfig
+from .models.bitlinear import BitLinear
 from .models.vision_encoder import VisionEncoder  
 from .models.language_encoder import LanguageEncoder
 from .models.action_decoder import ActionDecoder
@@ -41,6 +42,7 @@ from .utils.model_analysis import print_model_info, analyze_quantization
 __all__ = [
     # Models
     "VLABitNet",
+    "VLABitNetConfig",
     "BitLinear", 
     "VisionEncoder",
     "LanguageEncoder",

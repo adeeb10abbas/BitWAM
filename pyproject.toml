@@ -47,6 +47,7 @@ dependencies = [
     "einops>=0.8.0",
     "termcolor>=2.4.0",
     "packaging>=24.0",
+    "pyyaml>=6.0.0",
     # ML utilities
     "huggingface-hub>=0.24.0",
     # LeRobot essential dependencies

@@ -158,6 +158,27 @@ class BitLinear(nn.Module):
             stats["activation_scale"] = self.activation_scale.item()
             
         return stats
+
+    def get_quantization_summary(self) -> dict:
+        """
+        Return a model-level style summary for compatibility with analysis helpers.
+        """
+        total_parameters = sum(p.numel() for p in self.parameters())
+        # BitLinear stores all linear weights in ternary-ready form.
+        quantized_parameters = self.weight.numel()
+        fp_parameters = total_parameters - quantized_parameters
+        quantized_ratio = (
+            (quantized_parameters / total_parameters) * 100
+            if total_parameters > 0
+            else 0.0
+        )
+        return {
+            "total_parameters": total_parameters,
+            "quantized_parameters": quantized_parameters,
+            "bitlinear_parameters": quantized_parameters,
+            "fp_parameters": fp_parameters,
+            "quantized_ratio": quantized_ratio,
+        }
         
     def extra_repr(self) -> str:
         """String representation for debugging."""

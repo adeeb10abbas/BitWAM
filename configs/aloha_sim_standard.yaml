@@ -1,0 +1,9 @@
+dataset: lerobot/aloha_sim_insertion_human
+profile: standard
+epochs: 12
+batch_size: 16
+hidden_dim: 256
+max_text_len: 32
+lr: 0.0002
+use_tanh_actions: false
+run_name: lerobot_aloha_sim_standard

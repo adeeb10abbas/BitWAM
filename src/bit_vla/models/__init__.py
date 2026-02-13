@@ -4,7 +4,7 @@ from .bitlinear import BitLinear
 from .vision_encoder import VisionEncoder
 from .language_encoder import LanguageEncoder  
 from .action_decoder import ActionDecoder
-from .vla_bitnet import VLABitNet
+from .vla_bitnet import VLABitNet, VLABitNetConfig
 
 __all__ = [
     "BitLinear",
@@ -12,4 +12,5 @@ __all__ = [
     "LanguageEncoder",
     "ActionDecoder",
     "VLABitNet",
+    "VLABitNetConfig",
 ] 

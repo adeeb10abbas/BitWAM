@@ -33,7 +33,11 @@ class BitWAMPolicy(PreTrainedPolicy):
         self.upstream.config = config
         from lerobot_policy_bitwam.quantization import convert_for_qat
 
-        self.quantization_report = convert_for_qat(self, config.quantization_scope)
+        self.quantization_report = convert_for_qat(
+            self,
+            config.quantization_scope,
+            recovery=config.qat_recovery,
+        )
         self.reset()
 
     @property
@@ -59,6 +63,36 @@ class BitWAMPolicy(PreTrainedPolicy):
             **(config_overrides or {}),
         )
         return cls(config, upstream_policy=upstream)
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_name_or_path: str | Path,
+        *,
+        config: BitWAMConfig | None = None,
+        revision: str | None = None,
+        **kwargs: Any,
+    ) -> BitWAMPolicy:
+        """Load either a native VLA-JEPA source or an exported BitWAM checkpoint."""
+        is_native_source = config is not None and str(pretrained_name_or_path) == str(
+            config.source_checkpoint
+        )
+        if is_native_source:
+            upstream = VLAJEPAPolicy.from_pretrained(
+                pretrained_name_or_path,
+                config=config,
+                revision=revision or config.source_revision,
+                **kwargs,
+            )
+            policy = cls(config, upstream_policy=upstream)
+            policy.eval()
+            return policy
+        return super().from_pretrained(
+            pretrained_name_or_path,
+            config=config,
+            revision=revision,
+            **kwargs,
+        )
 
     def reset(self) -> None:
         self.upstream.reset()

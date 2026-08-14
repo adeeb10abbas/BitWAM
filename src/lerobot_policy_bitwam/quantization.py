@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass
 from typing import Literal
 
@@ -10,6 +11,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 QuantizationScope = Literal["none", "qwen", "qwen_dit"]
+QATRecovery = Literal["none", "qwen_edges", "dit_tail4"]
 
 
 class TernaryLinear(nn.Module):
@@ -104,6 +106,8 @@ class QuantizationReport:
     ternary_parameter_count: int
     bf16_parameter_count: int
     converted_modules: tuple[str, ...]
+    recovery: QATRecovery = "none"
+    recovery_bf16_modules: tuple[str, ...] = ()
 
     @property
     def eligible_ternary_fraction(self) -> float:
@@ -135,19 +139,50 @@ def _replace_module(root: nn.Module, name: str, replacement: nn.Module) -> None:
         setattr(parent, child_name, replacement)
 
 
-def convert_for_qat(policy: nn.Module, scope: QuantizationScope) -> QuantizationReport:
+def _recovery_exclusions(
+    candidates: list[tuple[str, nn.Linear]], recovery: QATRecovery
+) -> set[str]:
+    if recovery == "none":
+        return set()
+    pattern = (
+        r"\.language_model\.layers\.(\d+)\."
+        if recovery == "qwen_edges"
+        else r"\.transformer_blocks\.(\d+)\."
+    )
+    indexed = [(name, int(match.group(1))) for name, _ in candidates if (match := re.search(pattern, name))]
+    if not indexed:
+        return set()
+    indices = sorted({index for _, index in indexed})
+    excluded_indices = {indices[0], indices[-1]} if recovery == "qwen_edges" else set(indices[-4:])
+    return {name for name, index in indexed if index in excluded_indices}
+
+
+def convert_for_qat(
+    policy: nn.Module,
+    scope: QuantizationScope,
+    *,
+    recovery: QATRecovery = "none",
+) -> QuantizationReport:
     """Deterministically replace eligible linears for the requested QAT scope."""
     if scope not in {"none", "qwen", "qwen_dit"}:
         raise ValueError(f"Unknown quantization scope: {scope}")
+    if recovery not in {"none", "qwen_edges", "dit_tail4"}:
+        raise ValueError(f"Unknown QAT recovery: {recovery}")
+    if recovery == "qwen_edges" and scope != "qwen":
+        raise ValueError("qwen_edges recovery requires qwen scope.")
+    if recovery == "dit_tail4" and scope != "qwen_dit":
+        raise ValueError("dit_tail4 recovery requires qwen_dit scope.")
 
     total = sum(parameter.numel() for parameter in policy.parameters())
     selected_kinds = {"qwen"} if scope == "qwen" else {"qwen", "dit"} if scope == "qwen_dit" else set()
-    selected: list[tuple[str, nn.Linear]] = []
+    candidates: list[tuple[str, nn.Linear]] = []
     for name, module in sorted(policy.named_modules(), key=lambda item: item[0]):
         if isinstance(module, nn.Linear) and _eligible_kind(name) in selected_kinds:
-            selected.append((name, module))
+            candidates.append((name, module))
 
-    eligible = sum(module.weight.numel() for _, module in selected)
+    excluded = _recovery_exclusions(candidates, recovery)
+    selected = [(name, module) for name, module in candidates if name not in excluded]
+    eligible = sum(module.weight.numel() for _, module in candidates)
     for name, module in selected:
         _replace_module(policy, name, TernaryLinear.from_linear(module))
 
@@ -163,6 +198,8 @@ def convert_for_qat(policy: nn.Module, scope: QuantizationScope) -> Quantization
         ternary_parameter_count=ternary,
         bf16_parameter_count=total - ternary,
         converted_modules=tuple(name for name, _ in selected),
+        recovery=recovery,
+        recovery_bf16_modules=tuple(sorted(excluded)),
     )
     if hasattr(policy, "config"):
         policy.config.quantization_scope = scope

@@ -157,6 +157,20 @@ def test_cpu_forward_backward_delegates_to_upstream(patch_qwen: None) -> None:
     assert any(parameter.grad is not None for parameter in policy.parameters() if parameter.requires_grad)
 
 
+def test_native_source_checkpoint_loads_before_wrapping(
+    patch_qwen: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = BitWAMConfig.from_vla_jepa(_vla_config(), source_checkpoint="native-source")
+
+    def fake_from_pretrained(_cls, _path, *, config, **_kwargs):
+        return VLAJEPAPolicy(config)
+
+    monkeypatch.setattr(VLAJEPAPolicy, "from_pretrained", classmethod(fake_from_pretrained))
+    policy = BitWAMPolicy.from_pretrained("native-source", config=config)
+    assert isinstance(policy, BitWAMPolicy)
+    assert policy.config.source_checkpoint == "native-source"
+
+
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA device is not available on this host")
 def test_cuda_forward_backward_smoke(patch_qwen: None) -> None:
     config = BitWAMConfig.from_vla_jepa(_vla_config("cuda"), source_checkpoint="test")

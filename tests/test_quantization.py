@@ -41,17 +41,17 @@ class _DiTBlock(nn.Module):
 
 
 class _Tree(nn.Module):
-    def __init__(self) -> None:
+    def __init__(self, blocks: int = 1) -> None:
         super().__init__()
         self.qwen = nn.Module()
         self.qwen.model = nn.Module()
         self.qwen.model.model = nn.Module()
         self.qwen.model.model.language_model = nn.Module()
-        self.qwen.model.model.language_model.layers = nn.ModuleList([_QwenBlock()])
+        self.qwen.model.model.language_model.layers = nn.ModuleList([_QwenBlock() for _ in range(blocks)])
         self.qwen.vision_projection = nn.Linear(4, 4)
         self.action_model = nn.Module()
         self.action_model.model = nn.Module()
-        self.action_model.model.transformer_blocks = nn.ModuleList([_DiTBlock()])
+        self.action_model.model.transformer_blocks = nn.ModuleList([_DiTBlock() for _ in range(blocks)])
         self.action_model.action_encoder = nn.Linear(4, 4)
         self.action_model.action_decoder = nn.Linear(4, 4)
 
@@ -130,3 +130,20 @@ def test_none_scope_is_noop() -> None:
     assert tuple(type(module) for module in tree.modules()) == before
     assert report.eligible_parameter_count == 0
     assert report.ternary_parameter_count == 0
+
+
+def test_predefined_recoveries_keep_only_the_allowed_edges_in_bf16() -> None:
+    qwen_tree = _Tree(blocks=6)
+    qwen_report = convert_for_qat(qwen_tree, "qwen", recovery="qwen_edges")
+    qwen_blocks = qwen_tree.qwen.model.model.language_model.layers
+    assert isinstance(qwen_blocks[0].self_attn.q_proj, nn.Linear)
+    assert isinstance(qwen_blocks[-1].mlp.gate_proj, nn.Linear)
+    assert isinstance(qwen_blocks[1].self_attn.q_proj, TernaryLinear)
+    assert qwen_report.eligible_ternary_fraction < 1
+
+    dit_tree = _Tree(blocks=6)
+    dit_report = convert_for_qat(dit_tree, "qwen_dit", recovery="dit_tail4")
+    dit_blocks = dit_tree.action_model.model.transformer_blocks
+    assert isinstance(dit_blocks[1].attn1.q_proj, TernaryLinear)
+    assert isinstance(dit_blocks[2].attn1.q_proj, nn.Linear)
+    assert len(dit_report.recovery_bf16_modules) > 0

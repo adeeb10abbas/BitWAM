@@ -10,6 +10,7 @@ from lerobot.policies.vla_jepa.configuration_vla_jepa import VLAJEPAConfig
 
 QuantizationScope = Literal["none", "qwen", "qwen_dit"]
 InferenceBackend = Literal["native", "reference", "triton"]
+QATRecovery = Literal["none", "qwen_edges", "dit_tail4"]
 
 
 @PreTrainedConfig.register_subclass("bitwam")
@@ -22,6 +23,7 @@ class BitWAMConfig(VLAJEPAConfig):
     world_loss_weight: float | None = None
     quantization_scope: QuantizationScope = "none"
     inference_backend: InferenceBackend = "native"
+    qat_recovery: QATRecovery = "none"
 
     def __post_init__(self) -> None:
         if self.world_loss_weight is not None:
@@ -34,6 +36,12 @@ class BitWAMConfig(VLAJEPAConfig):
             raise ValueError(f"Unknown inference backend: {self.inference_backend}")
         if self.quantization_scope == "none" and self.inference_backend != "native":
             raise ValueError("Quantization-disabled policies must use the native backend.")
+        if self.qat_recovery not in {"none", "qwen_edges", "dit_tail4"}:
+            raise ValueError(f"Unknown QAT recovery: {self.qat_recovery}")
+        if self.qat_recovery == "qwen_edges" and self.quantization_scope != "qwen":
+            raise ValueError("qwen_edges recovery requires quantization_scope='qwen'.")
+        if self.qat_recovery == "dit_tail4" and self.quantization_scope != "qwen_dit":
+            raise ValueError("dit_tail4 recovery requires quantization_scope='qwen_dit'.")
 
     @classmethod
     def from_vla_jepa(

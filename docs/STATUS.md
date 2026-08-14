@@ -39,6 +39,9 @@ loader. The pinned LeRobot/Accelerate combination needs two narrow compatibility
 fixes supplied by `lerobot_policy_bitwam.train_entrypoint`: independent iterable
 batches preserve language strings, and CPU-offloaded gradient shards reduce
 their norm through a GPU scalar collective. Both behaviors have focused tests.
+Each GPU rank uses one loader worker; using four per rank replicated the
+streaming buffers until a host-memory kill, while the one-worker recipe completed
+the real optimizer-step acceptance run.
 
 The 2,000-step pilot keeps the original effective batch size of 8 as
 `1 sample × 2 GPU workers × 4 gradient-accumulation steps`. It saves at steps

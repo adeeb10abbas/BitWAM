@@ -34,6 +34,7 @@ def test_train_command_uses_plugin_source_and_bf16() -> None:
     assert "--policy.quantization_scope=qwen" in command
     assert "--accelerator.mixed_precision=bf16" in command
     assert "--save_checkpoint=true" in command
+    assert "--num_workers=1" in command
     assert "--steps=2000" in command
 
 

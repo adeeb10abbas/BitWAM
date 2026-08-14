@@ -107,7 +107,7 @@ def build_train_command(config: dict[str, Any]) -> tuple[str, ...]:
             _option("job_name", _required(config, "run_id")),
             _option("steps", _required(config, "steps")),
             _option("batch_size", config.get("batch_size", 8)),
-            _option("num_workers", config.get("num_workers", 4)),
+            _option("num_workers", config.get("num_workers", 1)),
             _option("seed", _required(config, "seed")),
             _option("save_freq", config.get("save_freq", 500)),
             _option("save_checkpoint", config.get("save_checkpoint", True)),

@@ -1,374 +1,40 @@
-# Python
+# Python and tooling
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-share/python-wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# PyInstaller
-*.manifest
-*.spec
-
-# Installer logs
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Unit test / coverage reports
-htmlcov/
-.tox/
-.nox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.py,cover
-.hypothesis/
 .pytest_cache/
-cover/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# IPython
-profile_default/
-ipython_config.py
-
-# pyenv
-.python-version
-
-# pipenv
-Pipfile.lock
-
-# poetry
-poetry.lock
-
-# pdm
-.pdm.toml
-
-# PEP 582
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
-# mypy
+.ruff_cache/
 .mypy_cache/
-.dmypy.json
-dmypy.json
+.venv/
+dist/
+build/
 
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# IDEs and Editors
-.vscode/
+# Local configuration and editor state
+.env
+.env.*
 .idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# PyCharm
-.idea/
-
-# VS Code
 .vscode/
-*.code-workspace
-
-# Sublime Text
-*.sublime-project
-*.sublime-workspace
-
-# Vim
 *.swp
-*.swo
-.netrwhist
-
-# Emacs
-*~
-\#*\#
-/.emacs.desktop
-/.emacs.desktop.lock
-*.elc
-auto-save-list
-tramp
-.\#*
-
-# macOS
 .DS_Store
-.AppleDouble
-.LSOverride
-Icon
-._*
-.DocumentRevisions-V100
-.fseventsd
-.Spotlight-V100
-.TemporaryItems
-.Trashes
-.VolumeIcon.icns
-.com.apple.timemachine.donotpresent
-.AppleDB
-.AppleDesktop
-Network Trash Folder
-Temporary Items
-.apdisk
 
-# Windows
-Thumbs.db
-Thumbs.db:encryptable
-ehthumbs.db
-ehthumbs_vista.db
-*.tmp
-*.temp
-Desktop.ini
-$RECYCLE.BIN/
-*.cab
-*.msi
-*.msix
-*.msm
-*.msp
-*.lnk
-
-# Linux
-*~
-.fuse_hidden*
-.directory
-.Trash-*
-.nfs*
-
-# Machine Learning / AI specific
-*.h5
-*.hdf5
-*.pkl
-*.pickle
-*.joblib
-*.model
-*.weights
-*.ckpt
-*.pth
-*.pt
-*.safetensors
-checkpoints/
-models/
-saved_models/
-model_weights/
-wandb/
-mlruns/
-.neptune/
-.clearml/
-.comet/
-
-# Data files (add specific patterns as needed)
+# Large research inputs and raw outputs
 data/
 datasets/
-*.csv
-*.tsv
-*.parquet
-*.feather
-*.json
-*.jsonl
-*.npy
-*.npz
-*.mat
-
-# Output and result directories
+checkpoints/
 outputs/
-results/
-logs/
-experiments/
-runs/
 artifacts/
-cache/
-tmp/
-temp/
-
-# Specific to this project
-lerobot_integration_results.json
-speed_benchmark_results.json
-*_results.json
-*_benchmark_*.json
-temp_speed_test.py
-
-# Video and image files (common in robotics)
+wandb/
+logs/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.h5
+*.hdf5
 *.mp4
 *.avi
 *.mov
-*.mkv
-*.webm
-*.jpg
-*.jpeg
-*.png
-*.gif
-*.bmp
-*.tiff
-*.svg
 
-# Audio files
-*.wav
-*.mp3
-*.flac
-*.aac
-
-# Large files and archives
-*.tar
-*.tar.gz
-*.tgz
-*.zip
-*.rar
-*.7z
-*.gz
-*.bz2
-*.xz
-
-# Documentation build
-docs/_build/
-docs/build/
-site/
-
-# LaTeX
-*.aux
-*.bbl
-*.blg
-*.fdb_latexmk
-*.fls
-*.log
-*.out
-*.synctex.gz
-*.toc
-
-# R
-.Rhistory
-.Rapp.history
-.RData
-.Ruserdata
-
-# MATLAB
-*.asv
-
-# Configuration files (be careful - some might be needed)
-config.ini
-config.yaml
-config.json
-secrets.json
-.secrets
-*.key
-*.pem
-*.crt
-
-# Database files
-*.db
-*.sqlite
-*.sqlite3
-
-# System files
-.directory
-.fseventsd
-.Spotlight-V100
-.Trashes
-
-# Backup files
-*.bak
-*.backup
-*.old
-*.orig
-*.save
-
-# Lock files
-*.lock
-
-# Node.js (in case of any JS tooling)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# C/C++ (for any compiled extensions)
-*.o
-*.obj
-*.exe
-*.dll
-*.dylib
-*.so.*
-
-# Fortran
-*.mod
-
-# CUDA
-*.cubin
-*.fatbin
-*.ptx
-
-# TensorBoard
-tensorboard_logs/
-tb_logs/
-
-# Hydra
-.hydra/
-hydra_outputs/
-
-# MLflow
-mlartifacts/
-
-# DVC
-.dvc/
-.dvcignore
-
-# Git LFS
-*.lfs
-
-# Keep empty directories with this file
-!.gitkeep
-
-# But ignore the .gitkeep files themselves in certain directories
-outputs/.gitkeep
-logs/.gitkeep
-data/.gitkeep
-models/.gitkeep 
+# Compact manifests and metrics under results/ are intentionally tracked.
+results/**/raw/
+results/**/videos/

@@ -1,0 +1,10 @@
+run_id: final-matrix
+seeds: [0, 1, 2]
+source_checkpoint: lerobot/VLA-JEPA-Pretrain
+output_dir: outputs/final-matrix
+steps: 30000
+episodes_per_task: 50
+effective_batch_size: 64
+world_loss_weights: [0.1, 0.0]
+quantization_scopes: [none, qwen_dit]
+inference_backend: triton

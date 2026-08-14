@@ -1,151 +1,52 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
 
 [project]
-name = "bit-vla"
+name = "lerobot-policy-bitwam"
 version = "0.1.0"
-description = "1-bit Vision-Language-Action models with BitNet quantization"
+description = "Ternary VLA-JEPA policy plugin for LeRobot"
 readme = "README.md"
-authors = [
-    {name = "Ali Adeeb", email = "abbas.a@northeastern.edu"}
-]
-license = {text = "MIT"}
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Topic :: Scientific/Engineering :: Artificial Intelligence",
-]
-keywords = ["machine learning", "robotics", "quantization", "bitnet", "vla"]
-requires-python = ">=3.8"
+requires-python = ">=3.12,<3.13"
+license = { file = "LICENSE" }
+authors = [{ name = "Ali Adeeb" }]
 dependencies = [
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
-    "numpy>=1.21.0",
-    "matplotlib>=3.5.0",
-    # Core functionality dependencies
-    "tqdm>=4.65.0",
-    "wandb>=0.16.0",
-    "jsonlines>=4.0.0",
-    # Data handling
-    "datasets>=2.19.0",
-    "h5py>=3.10.0",
-    "zarr>=2.17.0",
-    # Video processing (for LeRobot integration)
-    "av>=14.2.0",
-    "imageio[ffmpeg]>=2.34.0",
-    "opencv-python-headless>=4.9.0",
-    # Configuration and utilities
-    "omegaconf>=2.3.0",
-    "einops>=0.8.0",
-    "termcolor>=2.4.0",
-    "packaging>=24.0",
-    "pyyaml>=6.0.0",
-    # ML utilities
-    "huggingface-hub>=0.24.0",
-    # LeRobot essential dependencies
-    "draccus==0.10.0",
-    "pyserial>=3.5",
-    "deepdiff>=7.0.1",
-    # BitNet core dependencies (now included by default)
-    "zetascale>=2.1.6",
-    # Cross-platform evaluation dependencies
-    "psutil>=5.8.0",
+  "lerobot[vla_jepa,training,libero]==0.6.2",
+  "pyyaml>=6.0.2,<7",
+  "safetensors>=0.6,<1",
+  "torch==2.11.0",
+  "torchvision==0.26.0",
 ]
 
-[project.optional-dependencies]
+[project.scripts]
+bitwam = "lerobot_policy_bitwam.cli:main"
+
+[dependency-groups]
 dev = [
-    "pytest>=7.0.0",
-    "black>=22.0.0",
-    "isort>=5.10.0",
-    "flake8>=4.0.0",
-    "mypy>=0.900",
-    "pytest-cov>=5.0.0",
-]
-examples = [
-    "jupyterlab>=3.0.0",
-    "notebook>=6.4.0",
-    "seaborn>=0.11.0",
-]
-bitnet = [
-    # BitNet-specific dependencies for full quantization support
-    "zetascale>=2.1.6",
-    "einops>=0.8.0",  # Already in main deps but ensuring version
-    # CUDA dependencies (optional, will install if available)
-    "cupy-cuda12x>=12.0.0; platform_machine == 'x86_64' and sys_platform == 'linux'",
-]
-lerobot = [
-    # Full LeRobot compatibility
-    "gym-pusht>=0.1.5",
-    "gym-aloha>=0.1.1",
-    "gymnasium==0.29.1",
-    "diffusers>=0.27.2",
-    "transformers>=4.48.0",
-    "numba>=0.59.0",
-    "pymunk>=6.6.0,<7.0.0",
-    "rerun-sdk>=0.21.0",
-    "gdown>=5.1.0",
-    "flask>=3.0.3",
-    "pyzmq>=26.2.1",
-    "pynput>=1.7.7",
-]
-cross_platform = [
-    # Cross-platform evaluation tools
-    "psutil>=5.8.0",
-    "matplotlib>=3.5.0",
-    # Platform-specific optimizations
-    "torch-metal; sys_platform == 'darwin' and platform_machine == 'arm64'",
-]
-all = [
-    "bit-vla[dev,examples,lerobot,bitnet,cross_platform]",
+  "pytest>=8.4,<9",
+  "ruff>=0.14.1,<0.15",
 ]
 
-[project.urls]
-Homepage = "https://github.com/adeeb10abbas/1bit_vla"
-Repository = "https://github.com/adeeb10abbas/1bit_vla"
-Documentation = "https://github.com/adeeb10abbas/1bit_vla#readme"
-"Bug Tracker" = "https://github.com/adeeb10abbas/1bit_vla/issues"
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.uv.sources]
+lerobot = { git = "https://github.com/huggingface/lerobot.git", rev = "6adf51511b7625090eade8d82d9f61a1846ebe56" }
+torch = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cu128", marker = "sys_platform == 'linux'" }]
 
-# Include BitNet modules in the package
-[tool.setuptools.package-data]
-"*" = ["*.py", "*.txt", "*.md"]
-"bit_vla" = ["BitNet/bitnet/*.py", "BitNet/bitnet/**/*.py"]
+[tool.hatch.build.targets.wheel]
+packages = ["src/lerobot_policy_bitwam"]
 
-[tool.black]
-line-length = 88
-target-version = ['py38']
-include = '\.pyi?$'
-extend-exclude = '''
-/(
-  # directories
-  \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | build
-  | dist
-)/
-'''
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
+[tool.ruff]
+target-version = "py312"
+line-length = 110
 
-[tool.mypy]
-python_version = "3.8"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true 
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

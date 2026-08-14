@@ -1,9 +1,0 @@
-dataset: lerobot/pusht
-profile: quick
-epochs: 2
-batch_size: 16
-hidden_dim: 256
-max_text_len: 32
-lr: 0.0003
-use_tanh_actions: false
-run_name: lerobot_pusht_quick

@@ -131,7 +131,6 @@ Clone the renamed repository and work from the plan branch:
 git clone git@github.com:adeeb10abbas/BitWAM.git
 cd BitWAM
 git switch ali/claude
-uv sync
 ```
 
 Read this file completely before editing. Begin with Phase 1, execute phases sequentially, and push each completed phase to `ali/claude`. Long GPU jobs should be resumable, skip completed outputs, and write a PID and log file so another agent can inspect or resume them.

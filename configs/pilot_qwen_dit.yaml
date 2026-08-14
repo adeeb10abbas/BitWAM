@@ -7,11 +7,11 @@ output_dir: outputs/pilot-qwen-dit-seed0
 steps: 2000
 episodes: 50
 task_count: 10
-batch_size: 1
+batch_size: 4
 num_workers: 1
 num_processes: 2
 fsdp_cpu_offload: true
-gradient_accumulation_steps: 4
+gradient_accumulation_steps: 1
 save_freq: 1000
 world_loss_weight: 0.1
 quantization_scope: qwen_dit

@@ -5,7 +5,7 @@ dataset_repo: HuggingFaceVLA/libero
 dataset_streaming: true
 output_dir: outputs/smoke-qwen-dual-gpu
 steps: 1
-batch_size: 1
+batch_size: 4
 num_workers: 1
 num_processes: 2
 fsdp_cpu_offload: true

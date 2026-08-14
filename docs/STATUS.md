@@ -19,9 +19,10 @@ Status recorded on 2026-08-14 from branch `ali/claude`.
 - Phase 4 QAT smoke: one real Qwen-ternary training step completed across both
   local RTX 3090s with two-process FSDP, BF16 mixed precision, streaming data,
   CPU state offload, and the original gradient clipping threshold. The finite
-  metrics were loss `1.227`, action loss `1.090`, world loss `0.135`, and
-  gradient norm `279.157`; the optimizer update completed and the process exited
-  zero. The reported peak allocation was 6.66 GiB per rank.
+  effective global batch 8. The finite metrics were loss `0.822`, action loss
+  `0.688`, world loss `0.135`, and gradient norm `179.853`; the optimizer update
+  completed and the process exited zero. The reported peak allocation was
+  12.72 GiB per rank.
 
 The current required check result is `29 passed, 1 warning`. The warning is the
 expected CPU-autocast warning in a CPU-only delegation test; both CUDA acceptance
@@ -44,8 +45,10 @@ streaming buffers until a host-memory kill, while the one-worker recipe complete
 the real optimizer-step acceptance run.
 
 The 2,000-step pilot keeps the original effective batch size of 8 as
-`1 sample × 2 GPU workers × 4 gradient-accumulation steps`. It saves at steps
-1,000 and 2,000; a failed job automatically resumes from `checkpoints/last`.
+`4 samples × 2 GPU workers`, with no gradient accumulation. LeRobot counts
+microbatches as steps, so this layout preserves all 2,000 optimizer updates. It
+saves at steps 1,000 and 2,000; a failed job automatically resumes from
+`checkpoints/last`.
 
 ## Active Phase 4 gate
 

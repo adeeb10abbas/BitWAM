@@ -53,11 +53,25 @@ saves at steps 1,000 and 2,000; a failed job automatically resumes from
 ## Active Phase 4 gate
 
 The Qwen pilot must score at least 45 successes from 50 episodes to reach 90% of
-the measured BF16 result. Only then may the `qwen_dit` pilot run. Each predefined
-recovery config remains limited to one attempt exactly as stated in the plan.
+the measured BF16 result. Only then may the `qwen_dit` pilot run. The original
+execution plan limits each recovery to one attempt; the later cluster handoff adds
+only the bounded seed repeats and three fixed Qwen-boundary probes listed there.
+
+The saved step-1,000 full-Qwen checkpoint scored 0/50. It loaded correctly and
+produced incorrect closed-loop motion on all ten tasks. The original training
+process was stopped later at an unsaved step 1,667 so that evaluation could run.
+
+The predefined edge-BF16/lower-learning-rate Qwen recovery is now running locally
+on both RTX 3090s. Its training is numerically stable, but it has not yet produced
+a closed-loop result. Training loss must not be reported as policy success.
 
 Compact baseline provenance and metrics are committed under
-`results/baseline-bf16-seed0/`; raw simulator artifacts remain ignored.
+`results/baseline-bf16-seed0/`. The failed Qwen evaluation is summarized under
+`results/pilot-qwen-seed0/`; raw simulator artifacts remain ignored.
+
+For the cluster continuation, GPU assignment, bounded experiment variants,
+evaluation schedule, stop rules, and plain-language report format, see
+`docs/CLUSTER_HANDOFF.md`.
 
 ## Remaining work
 

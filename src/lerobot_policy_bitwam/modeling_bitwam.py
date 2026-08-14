@@ -17,6 +17,13 @@ class BitWAMPolicy(PreTrainedPolicy):
 
     config_class = BitWAMConfig
     name = "bitwam"
+    # Keep each repeated transformer unit independently shardable on the two local GPUs.
+    _fsdp_wrap_modules = [
+        "Qwen3VLTextDecoderLayer",
+        "Qwen3VLVisionBlock",
+        "BasicTransformerBlock",
+        "ACBlock",
+    ]
 
     def __init__(
         self,

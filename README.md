@@ -30,10 +30,12 @@ uv run bitwam benchmark --config configs/pilot.yaml    # Phase 5
 uv run bitwam summarize --config configs/final_matrix.yaml
 ```
 
-Training and evaluation write a PID, exact command, status JSON, and append-only
-log under the configured `output_dir`. Re-running an identical completed command
-skips it. Use a recovery config only if the corresponding first pilot misses its
-gate; the recovery choices are deliberately fixed by the execution plan.
+Training writes its PID, exact command, status JSON, and append-only log beside
+the configured output path so LeRobot can safely create that path itself.
+Evaluation stores the same metadata under the run path. Re-running an identical
+completed command skips it. Use a recovery config only if the corresponding
+first pilot misses its gate; the recovery choices are deliberately fixed by the
+execution plan.
 
 The GPU-backed pilot and final matrix must not be reported as complete without
 their closed-loop LIBERO artifacts and manifests.

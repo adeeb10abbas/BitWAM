@@ -1,0 +1,24 @@
+{
+  "successes": 49,
+  "episodes": 50,
+  "success_rate": 0.98,
+  "evaluation_seconds": 358.27342414855957,
+  "seconds_per_episode": 7.165468487739563,
+  "qwen_pilot_gate": {
+    "relative_fraction_of_baseline": 0.9,
+    "minimum_success_rate": 0.882,
+    "minimum_integer_successes_out_of_50": 45
+  },
+  "per_task": [
+    {"task_id": 0, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 1, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 2, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 3, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 4, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 5, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 6, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 7, "successes": 5, "episodes": 5, "success_rate": 1.0},
+    {"task_id": 8, "successes": 4, "episodes": 5, "success_rate": 0.8},
+    {"task_id": 9, "successes": 5, "episodes": 5, "success_rate": 1.0}
+  ]
+}

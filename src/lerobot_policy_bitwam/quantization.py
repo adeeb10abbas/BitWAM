@@ -61,10 +61,7 @@ class TernaryLinear(nn.Module):
     def quantized_weight(self) -> tuple[Tensor, Tensor]:
         """Return ternary codes and per-output-channel BF16 abs-mean scales."""
         scale = (
-            self.weight.detach()
-            .abs()
-            .mean(dim=1, keepdim=True)
-            .clamp_min(torch.finfo(torch.bfloat16).tiny)
+            self.weight.detach().abs().mean(dim=1, keepdim=True).clamp_min(torch.finfo(torch.bfloat16).tiny)
         )
         ternary = torch.round(self.weight.detach() / scale).clamp_(-1, 1)
         return ternary, scale
@@ -91,8 +88,7 @@ class TernaryLinear(nn.Module):
 
     def extra_repr(self) -> str:
         return (
-            f"in_features={self.in_features}, out_features={self.out_features}, "
-            f"bias={self.bias is not None}"
+            f"in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}"
         )
 
 
@@ -139,15 +135,11 @@ def _replace_module(root: nn.Module, name: str, replacement: nn.Module) -> None:
         setattr(parent, child_name, replacement)
 
 
-def _recovery_exclusions(
-    candidates: list[tuple[str, nn.Linear]], recovery: QATRecovery
-) -> set[str]:
+def _recovery_exclusions(candidates: list[tuple[str, nn.Linear]], recovery: QATRecovery) -> set[str]:
     if recovery == "none":
         return set()
     pattern = (
-        r"\.language_model\.layers\.(\d+)\."
-        if recovery == "qwen_edges"
-        else r"\.transformer_blocks\.(\d+)\."
+        r"\.language_model\.layers\.(\d+)\." if recovery == "qwen_edges" else r"\.transformer_blocks\.(\d+)\."
     )
     indexed = [(name, int(match.group(1))) for name, _ in candidates if (match := re.search(pattern, name))]
     if not indexed:
@@ -186,11 +178,7 @@ def convert_for_qat(
     for name, module in selected:
         _replace_module(policy, name, TernaryLinear.from_linear(module))
 
-    ternary = sum(
-        module.weight.numel()
-        for module in policy.modules()
-        if isinstance(module, TernaryLinear)
-    )
+    ternary = sum(module.weight.numel() for module in policy.modules() if isinstance(module, TernaryLinear))
     report = QuantizationReport(
         scope=scope,
         total_parameter_count=total,

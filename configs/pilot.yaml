@@ -2,11 +2,16 @@ run_id: pilot-qwen-seed0
 seed: 0
 source_checkpoint: lerobot/VLA-JEPA-LIBERO
 dataset_repo: HuggingFaceVLA/libero
+dataset_streaming: true
 output_dir: outputs/pilot-qwen-seed0
 steps: 2000
 episodes: 50
 task_count: 10
-batch_size: 8
+batch_size: 1
+num_processes: 2
+fsdp_cpu_offload: true
+gradient_accumulation_steps: 4
+save_freq: 1000
 world_loss_weight: 0.1
 quantization_scope: qwen
 qat_recovery: none

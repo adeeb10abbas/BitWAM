@@ -40,45 +40,96 @@ def _option(name: str, value: Any) -> str:
     return f"--{name}={serialized}"
 
 
+def _train_launcher(num_processes: int) -> list[str]:
+    if num_processes < 1:
+        raise ValueError("num_processes must be at least 1")
+    if num_processes == 1:
+        return [sys.executable, "-m", "lerobot_policy_bitwam.train_entrypoint"]
+    torchrun = Path(sys.executable).with_name("torchrun")
+    return [
+        str(torchrun),
+        "--standalone",
+        f"--nproc-per-node={num_processes}",
+        "--module",
+        "lerobot_policy_bitwam.train_entrypoint",
+    ]
+
+
+def _resume_config(output_dir: Path) -> Path | None:
+    candidate = output_dir / "checkpoints" / "last" / "pretrained_model" / "train_config.json"
+    state_path, _ = _metadata_paths(output_dir, "train")
+    if not candidate.is_file():
+        return None
+    if state_path.is_file():
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        if state.get("status") == "completed":
+            return None
+    return candidate
+
+
 def build_train_command(config: dict[str, Any]) -> tuple[str, ...]:
     """Translate a BitWAM experiment config to the pinned LeRobot trainer."""
     source = _required(config, "source_checkpoint")
-    output_dir = _required(config, "output_dir")
+    output_dir = Path(_required(config, "output_dir"))
     scope = config.get("quantization_scope", "none")
     world_weight = float(config.get("world_loss_weight", 0.1))
-    command = [
-        sys.executable,
-        "-m",
-        "lerobot.scripts.lerobot_train",
-        _option("policy.discover_packages_path", "lerobot_policy_bitwam"),
-        _option("policy.type", "bitwam"),
-        _option("policy.pretrained_path", source),
-        _option("policy.source_checkpoint", source),
-        _option("policy.source_revision", config.get("source_revision")),
-        _option("policy.world_loss_weight", world_weight),
-        _option("policy.world_model_loss_weight", world_weight),
-        _option("policy.quantization_scope", scope),
-        _option("policy.qat_recovery", config.get("qat_recovery", "none")),
-        _option("policy.inference_backend", "native"),
-        _option("policy.optimizer_lr", config.get("learning_rate", 1e-4)),
-        _option("policy.device", "cuda"),
-        _option("policy.torch_dtype", "bfloat16"),
-        _option("policy.push_to_hub", False),
-        _option("dataset.repo_id", _required(config, "dataset_repo")),
-        _option("output_dir", output_dir),
-        _option("job_name", _required(config, "run_id")),
-        _option("steps", _required(config, "steps")),
-        _option("batch_size", config.get("batch_size", 8)),
-        _option("num_workers", config.get("num_workers", 4)),
-        _option("seed", _required(config, "seed")),
-        _option("save_freq", config.get("save_freq", 500)),
-        _option("log_freq", config.get("log_freq", 20)),
-        _option("accelerator.mixed_precision", "bf16"),
-        _option(
-            "accelerator.gradient_accumulation.steps",
-            config.get("gradient_accumulation_steps", 1),
-        ),
-    ]
+    num_processes = int(config.get("num_processes", 1))
+    command = _train_launcher(num_processes)
+    if resume_config := _resume_config(output_dir):
+        command.extend(
+            [
+                _option("discover_packages_path", "lerobot_policy_bitwam"),
+                _option("resume", True),
+                _option("config_path", resume_config),
+            ]
+        )
+        return tuple(command)
+
+    command.extend(
+        [
+            _option("discover_packages_path", "lerobot_policy_bitwam"),
+            _option("policy.type", "bitwam"),
+            _option("policy.pretrained_path", source),
+            _option("policy.source_checkpoint", source),
+            _option("policy.source_revision", config.get("source_revision")),
+            _option("policy.world_loss_weight", world_weight),
+            _option("policy.world_model_loss_weight", world_weight),
+            _option("policy.quantization_scope", scope),
+            _option("policy.qat_recovery", config.get("qat_recovery", "none")),
+            _option("policy.inference_backend", "native"),
+            _option("policy.optimizer_lr", config.get("learning_rate", 1e-4)),
+            _option("policy.device", "cuda"),
+            _option("policy.torch_dtype", "bfloat16"),
+            _option("policy.push_to_hub", False),
+            _option("dataset.repo_id", _required(config, "dataset_repo")),
+            _option("dataset.streaming", config.get("dataset_streaming", False)),
+            _option("output_dir", output_dir),
+            _option("job_name", _required(config, "run_id")),
+            _option("steps", _required(config, "steps")),
+            _option("batch_size", config.get("batch_size", 8)),
+            _option("num_workers", config.get("num_workers", 4)),
+            _option("seed", _required(config, "seed")),
+            _option("save_freq", config.get("save_freq", 500)),
+            _option("save_checkpoint", config.get("save_checkpoint", True)),
+            _option("log_freq", config.get("log_freq", 20)),
+            _option("accelerator.mixed_precision", "bf16"),
+            _option(
+                "accelerator.gradient_accumulation.steps",
+                config.get("gradient_accumulation_steps", 1),
+            ),
+        ]
+    )
+    if num_processes > 1:
+        command.extend(
+            [
+                _option("parallelism.dp_shard", num_processes),
+                _option("accelerator.fsdp.reshard_after_forward", True),
+                _option(
+                    "accelerator.fsdp.cpu_offload",
+                    config.get("fsdp_cpu_offload", False),
+                ),
+            ]
+        )
     return tuple(option for option in command if not option.endswith("=None"))
 
 
@@ -102,7 +153,7 @@ def build_evaluate_command(config: dict[str, Any]) -> tuple[str, ...]:
         sys.executable,
         "-m",
         "lerobot.scripts.lerobot_eval",
-        _option("policy.discover_packages_path", "lerobot_policy_bitwam"),
+        _option("discover_packages_path", "lerobot_policy_bitwam"),
         _option("policy.path", _evaluation_checkpoint(config)),
         _option("policy.device", "cuda"),
         _option("env.type", "libero"),
@@ -126,11 +177,24 @@ def _command_id(command: Sequence[str]) -> str:
     return hashlib.sha256(json.dumps(list(command)).encode()).hexdigest()
 
 
+def _metadata_paths(output_dir: Path, stage: str) -> tuple[Path, Path]:
+    """Return metadata paths without pre-creating LeRobot's guarded training directory."""
+    if stage == "train":
+        prefix = output_dir.parent / f".{output_dir.name}"
+        return (
+            prefix.with_name(f"{prefix.name}.{stage}_state.json"),
+            prefix.with_name(f"{prefix.name}.{stage}.log"),
+        )
+    return output_dir / f"{stage}_state.json", output_dir / f"{stage}.log"
+
+
 def _run_external(command: Sequence[str], output_dir: Path, stage: str) -> int:
     """Run a long job with a PID, durable log, exact command, and safe completed-run skip."""
-    output_dir.mkdir(parents=True, exist_ok=True)
-    state_path = output_dir / f"{stage}_state.json"
-    log_path = output_dir / f"{stage}.log"
+    if stage == "train":
+        output_dir.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        output_dir.mkdir(parents=True, exist_ok=True)
+    state_path, log_path = _metadata_paths(output_dir, stage)
     command_id = _command_id(command)
     if state_path.is_file():
         state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -140,6 +204,7 @@ def _run_external(command: Sequence[str], output_dir: Path, stage: str) -> int:
 
     environment = os.environ.copy()
     environment.setdefault("MUJOCO_GL", "egl")
+    environment.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     with log_path.open("a", encoding="utf-8") as log:
         process = subprocess.Popen(
             list(command),

@@ -1,0 +1,41 @@
+{
+  "run_id": "baseline-bf16-seed0",
+  "phase": 4,
+  "status": "completed",
+  "started_from_git_revision": "c3d46f7fcb0708919a7b23eb9177e431d2ab1f44",
+  "config": "configs/baseline.yaml",
+  "seed": 0,
+  "policy": {
+    "checkpoint": "lerobot/VLA-JEPA-LIBERO",
+    "checkpoint_revision": "735d9f692981e286ade093b5046627eda876e5d0",
+    "quantization_scope": "none",
+    "compute_dtype": "bfloat16"
+  },
+  "environment": {
+    "task_suite": "libero_10",
+    "task_count": 10,
+    "episodes_per_task": 5,
+    "total_episodes": 50
+  },
+  "software": {
+    "lerobot_revision": "6adf51511b7625090eade8d82d9f61a1846ebe56",
+    "torch": "2.11.0+cu128",
+    "nvidia_driver": "535.309.01"
+  },
+  "hardware": {
+    "evaluation_gpu_index": 0,
+    "evaluation_gpu": "NVIDIA GeForce RTX 3090",
+    "evaluation_gpu_memory_mib": 24576
+  },
+  "artifacts": {
+    "raw_metrics": "outputs/baseline-bf16-seed0/evaluation/eval_info.json",
+    "videos": "outputs/baseline-bf16-seed0/evaluation/videos",
+    "video_count": 50,
+    "log": "outputs/baseline-bf16-seed0/evaluate.log",
+    "state": "outputs/baseline-bf16-seed0/evaluate_state.json"
+  },
+  "notes": [
+    "Closed-loop evaluation completed with exit code 0.",
+    "The upstream loader reported one unexpected tied embedding key and continued successfully."
+  ]
+}

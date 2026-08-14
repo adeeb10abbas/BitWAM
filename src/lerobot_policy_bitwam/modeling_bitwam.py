@@ -27,12 +27,13 @@ class BitWAMPolicy(PreTrainedPolicy):
     ) -> None:
         super().__init__(config)
         config.validate_features()
-        if config.quantization_scope != "none":
-            raise ValueError("QAT conversion is introduced in Phase 3; use quantization_scope='none'.")
         if upstream_policy is None:
             upstream_policy = VLAJEPAPolicy(config, **kwargs)
         self.upstream = upstream_policy
         self.upstream.config = config
+        from lerobot_policy_bitwam.quantization import convert_for_qat
+
+        self.quantization_report = convert_for_qat(self, config.quantization_scope)
         self.reset()
 
     @property

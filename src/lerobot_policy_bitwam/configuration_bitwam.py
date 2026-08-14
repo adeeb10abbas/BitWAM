@@ -1,0 +1,55 @@
+"""LeRobot configuration for the BitWAM policy plugin."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, fields
+from typing import Any, Literal
+
+from lerobot.configs.policies import PreTrainedConfig
+from lerobot.policies.vla_jepa.configuration_vla_jepa import VLAJEPAConfig
+
+QuantizationScope = Literal["none", "qwen", "qwen_dit"]
+InferenceBackend = Literal["native", "reference", "triton"]
+
+
+@PreTrainedConfig.register_subclass("bitwam")
+@dataclass
+class BitWAMConfig(VLAJEPAConfig):
+    """VLA-JEPA configuration extended with BitWAM deployment controls."""
+
+    source_checkpoint: str = "lerobot/VLA-JEPA-LIBERO"
+    source_revision: str | None = None
+    world_loss_weight: float | None = None
+    quantization_scope: QuantizationScope = "none"
+    inference_backend: InferenceBackend = "native"
+
+    def __post_init__(self) -> None:
+        if self.world_loss_weight is not None:
+            self.world_model_loss_weight = self.world_loss_weight
+        super().__post_init__()
+        self.world_loss_weight = self.world_model_loss_weight
+        if self.quantization_scope not in {"none", "qwen", "qwen_dit"}:
+            raise ValueError(f"Unknown quantization scope: {self.quantization_scope}")
+        if self.inference_backend not in {"native", "reference", "triton"}:
+            raise ValueError(f"Unknown inference backend: {self.inference_backend}")
+        if self.quantization_scope == "none" and self.inference_backend != "native":
+            raise ValueError("Quantization-disabled policies must use the native backend.")
+
+    @classmethod
+    def from_vla_jepa(
+        cls,
+        config: VLAJEPAConfig,
+        *,
+        source_checkpoint: str,
+        source_revision: str | None = None,
+        **overrides: Any,
+    ) -> BitWAMConfig:
+        """Copy an upstream checkpoint config without changing VLA-JEPA behavior."""
+        values = {field.name: getattr(config, field.name) for field in fields(VLAJEPAConfig) if field.init}
+        values.update(
+            source_checkpoint=source_checkpoint,
+            source_revision=source_revision,
+            world_loss_weight=config.world_model_loss_weight,
+        )
+        values.update(overrides)
+        return cls(**values)

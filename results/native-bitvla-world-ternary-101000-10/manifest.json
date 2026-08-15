@@ -1,0 +1,24 @@
+{
+  "run_id": "native-bitvla-world-ternary-101000-10",
+  "status": "completed",
+  "architecture": "native-bitvla-wam",
+  "stage": "joint_action_world_posttrain",
+  "training_config": "configs/bitvla-world-posttrain-libero10.yaml",
+  "training_config_revision": "d57e5b4",
+  "evaluation_config": "configs/bitvla-world-eval-101000-10.yaml",
+  "bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7",
+  "checkpoint_step": 101000,
+  "training_updates": 1000,
+  "effective_global_batch": 64,
+  "world_head_precision": "ternary",
+  "world_loss_weight": 0.1,
+  "world_contrastive_weight": 1.0,
+  "world_contrastive_margin": 0.05,
+  "hardware": "2x NVIDIA B200 training; shared 1x NVIDIA B200 evaluation",
+  "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--101000_chkpt",
+  "artifacts": {
+    "training_metrics": "/data/users/ali/bitvla_runs/bitwam-world-posttrain/metrics.jsonl",
+    "evaluation_log": "/data/users/ali/logs/bitvla-world-eval-101000-10-retry.log",
+    "videos": "/data/users/ali/BitVLA/openvla-oft/rollouts/bitwam-world-101000"
+  }
+}

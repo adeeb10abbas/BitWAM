@@ -1,5 +1,5 @@
 architecture: bitvla
-config_revision: 8c3f444
+config_revision: c8644d4
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 checkpoint: /data/users/ali/bitvla_runs/bitwam-droid-pretrain-libero-posttrain--102000_chkpt

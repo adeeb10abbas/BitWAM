@@ -1,0 +1,11 @@
+architecture: bitvla
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+checkpoint: /data/users/ali/bitvla_runs/bitvla-action-only-posttrain--102000_chkpt
+output_dir: /data/users/ali/bitvla_benchmarks/action-only
+run_id: action-only-102000
+task_suite_name: libero_10
+seed: 0
+benchmark_target: policy
+benchmark_warmup_iterations: 20
+benchmark_iterations: 100

@@ -239,6 +239,19 @@ def build_evaluate_command(config: dict[str, Any]) -> tuple[str, ...]:
     )
 
 
+def build_benchmark_command(config: dict[str, Any]) -> tuple[str, ...]:
+    """Build the reproducible native BitVLA performance benchmark command."""
+    if config.get("architecture") != "bitvla":
+        raise ValueError("The native performance benchmark currently requires architecture: bitvla")
+    return (
+        sys.executable,
+        "-m",
+        "lerobot_policy_bitwam.bitvla_benchmark",
+        "--config",
+        str(_required(config, "_config_path")),
+    )
+
+
 def _write_state(path: Path, payload: dict[str, Any]) -> None:
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -332,4 +345,6 @@ def run_command(command: str, config_path: Path) -> int:
         return _run_external(build_evaluate_command(screen_config), screen_output_dir, "screen")
     if command == "evaluate":
         return _run_external(build_evaluate_command(config), output_dir, "evaluate")
+    if command == "benchmark":
+        return _run_external(build_benchmark_command(config), output_dir, "benchmark")
     raise NotImplementedError(f"The {command!r} workflow is introduced by a later execution phase.")

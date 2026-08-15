@@ -7,6 +7,7 @@ import pytest
 
 from lerobot_policy_bitwam.workflows import (
     _metadata_paths,
+    build_benchmark_command,
     build_evaluate_command,
     build_train_command,
     run_command,
@@ -219,6 +220,17 @@ def test_smoke_checkpoint_can_be_used_for_its_ten_episode_environment_check() ->
     command = build_evaluate_command(config)
     assert "--eval.n_episodes=1" in command
     assert "--policy.path=outputs/cluster-smoke/checkpoints/000001/pretrained_model" in command
+
+
+def test_native_bitvla_benchmark_uses_reproducible_wrapper(tmp_path: Path) -> None:
+    config_path = tmp_path / "benchmark.yaml"
+    config = {
+        "architecture": "bitvla",
+        "_config_path": str(config_path),
+    }
+    command = build_benchmark_command(config)
+    assert command[1:3] == ("-m", "lerobot_policy_bitwam.bitvla_benchmark")
+    assert command[-1] == str(config_path)
 
 
 def test_screen_uses_ten_episodes_in_a_separate_output_directory(tmp_path: Path, monkeypatch) -> None:

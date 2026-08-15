@@ -36,7 +36,8 @@ result.
 
 | Stage | Updates | Global batch | Trainable components | Gate |
 | --- | ---: | ---: | --- | --- |
-| S: DROID-100 smoke | 2 | 2 | BF16 world head | verified schema, finite loss, checkpoint |
+| S0: DROID-100 smoke | 2 | 2 | BF16 world head | verified schema, finite loss, checkpoint |
+| S1: full-release smoke | 2 | 2 | BF16 world head | verified full manifest, split-keyed stats, finite loss |
 | P: DROID pretrain | 20,000 | 256 | BF16 world head | held-out cosine improves over initialization and shuffled actions |
 | M: DROID midtrain | 5,000 | 128 | action pathway + BF16 world head | positive action-conditioning gap without action regression collapse |
 | F: LIBERO posttrain | 2,000 | 128 | action pathway + ternary world head | ordered 10-task smoke, then paired 50-episode evaluation |
@@ -44,6 +45,10 @@ result.
 Stage P runs on four B200s. Stage M and F use the same four-rank topology so
 throughput comparisons are not confounded by hardware. Three seeds are promoted
 only after seed 0 passes its stage gate.
+
+Stage S1 is deliberately separate from S0. It exercises the complete 1.0.1
+release, the reserved `train[:99%]` slice, and its exact normalization cache
+before an expensive distributed job can allocate GPUs.
 
 The zero-action and action-only controls run on two A100-80GB ranks with doubled
 gradient accumulation, preserving the primary arm's global batch and optimizer

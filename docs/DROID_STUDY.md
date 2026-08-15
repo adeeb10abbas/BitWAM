@@ -73,6 +73,10 @@ only after seed 0 passes its stage gate.
   energy/thermal telemetry when available.
 - External models: report their native runtime and precision. Do not label a run
   TensorRT unless an actual, validated TensorRT engine produced the measurement.
+- NVIDIA's current TensorRT-LLM Cosmos3 recipe covers audiovisual image/video
+  generation, not the DROID action mode. Action baselines therefore use Cosmos
+  Framework or vLLM-Omni unless action support is validated in the exact
+  TensorRT-LLM revision under test.
 - Comparisons between latent prediction and video generation are separated;
   video quality is not treated as the same target as BitWAM's latent objective.
 

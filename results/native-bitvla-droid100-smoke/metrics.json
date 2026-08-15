@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "stage": "droid_world_head_smoke",
+  "step": 100001,
+  "optimizer_steps_from_resume_boundary": 2,
+  "action_l1": 0.33301,
+  "world_loss": 0.97842,
+  "world_cosine_similarity": 0.02158,
+  "world_shuffled_action_loss": 0.97835,
+  "world_action_conditioning_gap": -0.00006,
+  "finite": true,
+  "checkpoint_written": true
+}

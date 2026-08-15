@@ -1,0 +1,30 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "code_revision": "8e05700",
+  "upstream_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7",
+  "config": "configs/bitvla-world-smoke-droid100.yaml",
+  "hardware": "1x NVIDIA B200 183359 MiB",
+  "dataset": {
+    "source": "gs://gresearch/robotics/droid_100/1.0.0/",
+    "episodes": 100,
+    "objects": 33,
+    "bytes": 2192615094,
+    "verified": true,
+    "download_manifest_sha256": "cb2ff03f40c2ba1a6b15df9eba0f1a034390222bd631f3ba2b95056558be2d8d"
+  },
+  "checkpoint": {
+    "path": "/data/users/ali/bitvla_runs/bitwam-droid100-smoke--100001_chkpt",
+    "manifest_sha256": "9c578682625c14ddc3f96ad5833d2a887c098a017800a556470e41022f151027",
+    "world_model_sha256": "26563fa90ce9739f97f05696424ba97b88fc7429857b3a8417d2f8e8502b738b",
+    "action_head_sha256": "95e69cb3c03610039577bb36834f492588e5ed74f3eae409a6fa432f4d01f7f1"
+  },
+  "log": "/data/users/ali/logs/bitvla-droid100-smoke-attempt02.log",
+  "excluded_attempts": [
+    {
+      "attempt": 1,
+      "classification": "setup_invalid",
+      "reason": "The one-rank command omitted torchrun, so upstream dist.barrier had no default process group. No optimizer step ran."
+    }
+  ]
+}

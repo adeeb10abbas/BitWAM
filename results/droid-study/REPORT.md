@@ -31,8 +31,8 @@ stage definitions are preregistered in `docs/DROID_STUDY.md`.
 | DROID-100 object integrity | 33 objects; 2,192,615,094 bytes; per-object MD5 | passed |
 | DROID-100 schema/gradient | two optimizer steps on one B200 | passed |
 | Full DROID 1.0.1 object integrity | 2,050 objects; 1,865,994,705,042 bytes; 2,048 TFRecord shards; 95,658 episodes; per-object size and MD5 | passed |
-| Full train statistics | deterministic `train[:99%]`, cache keyed by split | running |
-| Full-release gradient | two optimizer steps on one B200 | pending statistics |
+| Full train statistics | 94,701 trajectories; 27,358,560 transitions; deterministic `train[:99%]`, cache keyed by split | passed |
+| Full-release gradient | two finite optimizer steps on one B200; config revision `c8644d4` | passed |
 
 The full-release manifest is archived as
 `results/droid-study/droid-full-download-manifest.json` with SHA-256
@@ -40,6 +40,23 @@ The full-release manifest is archived as
 Its nine `downloaded` objects were recovered full-size partials that passed the
 same GCS MD5 check before atomic promotion; the other 2,041 objects were read
 and reverified from their final paths. No partial files remain.
+
+The first full statistics attempt is excluded as infrastructure-invalid:
+unbounded TFDS AUTOTUNE saw the 3.9-TiB host rather than the pod's 64-GiB cgroup,
+opened 1,249 threads, and was OOM-killed before producing an output. The
+replacement at code revision `b325ed3` bounds file readers and trajectory maps,
+uses a private `tf.data` pool, sets an explicit AUTOTUNE RAM budget, and caps
+iterator prefetch. Those exact limits are recorded in the statistics manifest.
+
+The statistics JSON and resource manifest have SHA-256
+`ffa637f802a9f993414c84db10f2e310f3e4c4d7b44202c2c53ef0b3893e295d`
+and `74aef7127e52babaaf0dbe35d06de315d0274045283744bf8ab0d51c4d8cfdca`,
+respectively. The full-release smoke's second update produced action L1
+0.347656, world loss 0.979063, future cosine 0.020937, and global forward
+throughput 1.518 examples/s. Peak CUDA allocation and reservation were
+8,218,831,872 and 9,135,194,112 bytes. The conditioning gap was approximately
+`-5.0e-6`, which is retained as the untrained-head baseline rather than treated
+as a quality result.
 
 The DROID-100 run produced finite losses and a checkpoint, but it is an
 initialization smoke and not a quality result. Its archived action L1 was

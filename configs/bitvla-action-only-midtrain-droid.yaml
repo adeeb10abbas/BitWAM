@@ -1,5 +1,5 @@
 architecture: bitvla
-config_revision: c8644d4
+config_revision: 821b1bf
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_action_only_midtrain

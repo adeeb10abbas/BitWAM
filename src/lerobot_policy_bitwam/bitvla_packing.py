@@ -127,6 +127,43 @@ def _torch_int8_forward(
     return output
 
 
+def _triton_direct_forward(
+    layer: nn.Module,
+    inputs: torch.Tensor,
+    *,
+    activation_backend: str,
+    bf16_candidate: bool,
+) -> torch.Tensor:
+    from lerobot_policy_bitwam.bitvla_packed_kernel import (
+        direct_packed_bf16_linear,
+        direct_packed_int8_linear,
+    )
+
+    rows, columns = layer.orig_shape
+    if bf16_candidate:
+        return direct_packed_bf16_linear(
+            inputs,
+            layer.q_weight,
+            layer.w_step,
+            layer.bias,
+            rows,
+            columns,
+            backend="triton",
+            activation_backend=activation_backend,
+        )
+    return direct_packed_int8_linear(
+        inputs,
+        layer.q_weight,
+        layer.w_step,
+        layer.bias,
+        rows,
+        columns,
+        backend="triton",
+        activation_backend=activation_backend,
+        decode_mode="scalar",
+    )
+
+
 def _compiled_linear_forward(layer: nn.Module, inputs: torch.Tensor, compiled_linear: Any) -> torch.Tensor:
     upstream_module = sys.modules[layer.__class__.__module__]
     if int(getattr(layer, "input_bits", 8)) == 8:
@@ -234,6 +271,53 @@ def enable_torch_int8_bitlinear_runtime(module: nn.Module) -> int:
     return optimized_layers
 
 
+def enable_triton_direct_bitlinear_runtime(
+    module: nn.Module,
+    *,
+    activation_backend: str = "torch",
+    bf16_candidate: bool = False,
+) -> int:
+    """Use the experimental direct packed Triton projection without a dense weight tensor.
+
+    The caller must apply an end-to-end action equality gate before latency or
+    policy-quality measurements.  ``activation_backend='torch'`` preserves the
+    upstream activation quantization operation order; the integer accumulation
+    itself is not equivalent to upstream BF16 ``F.linear``.
+    """
+    from lerobot_policy_bitwam.bitvla_packed_kernel import triton_packed_kernel_available
+
+    if not triton_packed_kernel_available():
+        raise RuntimeError("The direct packed runtime requires Triton and CUDA")
+    if activation_backend not in {"torch", "hybrid", "triton"}:
+        raise ValueError(f"Unsupported direct activation backend: {activation_backend}")
+
+    optimized_layers = 0
+    for candidate in module.modules():
+        if candidate.__class__.__name__ != "BitLinear" or not bool(
+            getattr(candidate, "enable_qlora", False)
+        ):
+            continue
+        if not isinstance(getattr(candidate, "q_weight", None), torch.Tensor):
+            continue
+        candidate.w_step = candidate.w_step.to(candidate.q_weight.device)
+        candidate.forward = MethodType(
+            lambda layer,
+            inputs,
+            activation=activation_backend,
+            bf16=bf16_candidate: _triton_direct_forward(
+                layer,
+                inputs,
+                activation_backend=activation,
+                bf16_candidate=bf16,
+            ),
+            candidate,
+        )
+        optimized_layers += 1
+    if optimized_layers == 0:
+        raise RuntimeError("No packed BitLinear layers were available for direct Triton inference")
+    return optimized_layers
+
+
 def _matches_scope(candidate: nn.Module, scope: str) -> bool:
     module_name = candidate.__class__.__module__
     if scope == "all":
@@ -242,6 +326,18 @@ def _matches_scope(candidate: nn.Module, scope: str) -> bool:
         return "modeling_bitnet" in module_name
     if scope == "vision":
         return "modeling_siglip" in module_name
+    weight = getattr(candidate, "weight", None)
+    shape = tuple(weight.shape) if isinstance(weight, torch.Tensor) else tuple(
+        getattr(candidate, "orig_shape", ())
+    )
+    if scope == "text_mlp":
+        return "modeling_bitnet" in module_name and 6912 in shape
+    if scope == "text_mlp_down":
+        return "modeling_bitnet" in module_name and shape == (2560, 6912)
+    if scope == "text_mlp_gate_up":
+        return "modeling_bitnet" in module_name and shape == (6912, 2560)
+    if scope == "text_attention":
+        return "modeling_bitnet" in module_name and len(shape) == 2 and 6912 not in shape
     raise ValueError(f"Unsupported BitLinear packing scope: {scope}")
 
 

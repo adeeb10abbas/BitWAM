@@ -22,6 +22,7 @@ from lerobot_policy_bitwam.bitvla_packing import (
     enable_compiled_bitlinear_runtime,
     enable_compiled_bitlinear_unpack,
     enable_torch_int8_bitlinear_runtime,
+    enable_triton_direct_bitlinear_runtime,
     pack_bitlinear_weights,
 )
 from lerobot_policy_bitwam.bitvla_world import LatentWorldModelHead
@@ -135,6 +136,14 @@ def _fresh_observation(images: tuple[np.ndarray, np.ndarray], state: np.ndarray)
 
 def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     evaluator = _load_upstream_evaluator(config)
+    if bool(config.get("prevent_checkpoint_mutation", True)):
+        from experiments.robot import bitnet_utils
+
+        def no_checkpoint_mutation(*args: Any, **kwargs: Any) -> None:
+            return None
+
+        bitnet_utils.update_auto_map = no_checkpoint_mutation
+        bitnet_utils.check_model_logic_mismatch = no_checkpoint_mutation
     checkpoint = Path(_required(config, "checkpoint"))
     warmup = int(config.get("benchmark_warmup_iterations", 10))
     iterations = int(config.get("benchmark_iterations", 50))
@@ -206,6 +215,14 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
             packing["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
         elif packed_backend == "torch_int8":
             packing["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
+        elif packed_backend in {"triton_direct_int8", "triton_direct_bf16"}:
+            direct_activation = str(config.get("packed_activation_backend", "torch"))
+            packing["triton_direct_layers"] = enable_triton_direct_bitlinear_runtime(
+                model,
+                activation_backend=direct_activation,
+                bf16_candidate=packed_backend == "triton_direct_bf16",
+            )
+            packing["activation_backend"] = direct_activation
         elif packed_backend != "eager_unpack":
             raise ValueError(f"Unsupported packed_runtime_backend: {packed_backend}")
         packing["backend"] = packed_backend
@@ -224,6 +241,32 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
                 "max_absolute_error": float(difference.max(initial=0)),
                 "mean_absolute_error": float(difference.mean()),
             }
+            if bool(config.get("require_exact_packed_output", False)) and not correctness[
+                "exact_match"
+            ]:
+                gate_dir = Path(_required(config, "output_dir"))
+                gate_dir.mkdir(parents=True, exist_ok=True)
+                (gate_dir / "correctness_gate.json").write_text(
+                    json.dumps(
+                        {
+                            "schema_version": 1,
+                            "status": "rejected_before_timing",
+                            "run_id": str(_required(config, "run_id")),
+                            "packing": packing,
+                            "correctness": correctness,
+                        },
+                        indent=2,
+                        sort_keys=True,
+                    )
+                    + "\n",
+                    encoding="utf-8",
+                )
+                raise RuntimeError(
+                    "Packed runtime failed the required exact-action gate: "
+                    f"backend={packed_backend}, max_absolute_error="
+                    f"{correctness['max_absolute_error']}, mean_absolute_error="
+                    f"{correctness['mean_absolute_error']}"
+                )
         gc.collect()
         torch.cuda.empty_cache()
 

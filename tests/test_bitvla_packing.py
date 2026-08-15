@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from lerobot_policy_bitwam.bitvla_packing import (
+    _matches_scope,
     dequantize_packed_weight,
     pack_bitlinear_weights,
     packed_linear,
@@ -67,6 +68,22 @@ def test_pack_bitlinear_weights_rejects_models_without_eligible_layers() -> None
         assert "No eligible" in str(error)
     else:
         raise AssertionError("packing should fail when a model has no BitLinear layers")
+
+
+def test_shape_scopes_select_text_mlp_projections() -> None:
+    candidate_type = type("BitLinear", (), {"__module__": "transformers.models.llava.modeling_bitnet"})
+    down = candidate_type()
+    down.weight = torch.empty((2560, 6912), device="meta")
+    gate = candidate_type()
+    gate.weight = torch.empty((6912, 2560), device="meta")
+    attention = candidate_type()
+    attention.weight = torch.empty((2560, 2560), device="meta")
+
+    assert _matches_scope(down, "text_mlp")
+    assert _matches_scope(down, "text_mlp_down")
+    assert not _matches_scope(down, "text_mlp_gate_up")
+    assert _matches_scope(gate, "text_mlp_gate_up")
+    assert _matches_scope(attention, "text_attention")
 
 
 def test_dequantize_packed_weight_restores_four_codes_per_byte() -> None:

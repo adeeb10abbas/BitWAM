@@ -1,0 +1,685 @@
+{
+  "device": {
+    "capability": [
+      12,
+      0
+    ],
+    "cuda": "12.8",
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "torch": "2.9.1+cu128"
+  },
+  "measurements": [
+    {
+      "dense": {
+        "mean_ms": 0.14923428637640818,
+        "min_ms": 0.14732800424098969,
+        "p50_ms": 0.14825600385665894,
+        "p95_ms": 0.1542080044746399
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.5603885735784259,
+        "min_ms": 0.5538880228996277,
+        "p50_ms": 0.5596160292625427,
+        "p95_ms": 0.566431999206543
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 32,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.26492451270924,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.14147657368864333,
+        "min_ms": 0.1387840062379837,
+        "p50_ms": 0.14070400595664978,
+        "p95_ms": 0.14633600413799286
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.7845211539949689,
+        "min_ms": 0.7784640192985535,
+        "p50_ms": 0.7844480276107788,
+        "p95_ms": 0.7949439883232117
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 32,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.17936689366814645,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.33178057415144785,
+        "min_ms": 0.3303680121898651,
+        "p50_ms": 0.3309440016746521,
+        "p95_ms": 0.33542400598526
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.848585137299129,
+        "min_ms": 0.8415039777755737,
+        "p50_ms": 0.8482239842414856,
+        "p95_ms": 0.8535040020942688
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 32,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.39016109874633514,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.15066971523421152,
+        "min_ms": 0.14851200580596924,
+        "p50_ms": 0.15059199929237366,
+        "p95_ms": 0.15251199901103973
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.21463314124516078,
+        "min_ms": 0.21254399418830872,
+        "p50_ms": 0.2144320011138916,
+        "p95_ms": 0.217631995677948
+      },
+      "kernel_config": {
+        "block_k": 32,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.7022832343591734,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.13988571507590158,
+        "min_ms": 0.1383039951324463,
+        "p50_ms": 0.14006400108337402,
+        "p95_ms": 0.14182400703430176
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.33287314432007925,
+        "min_ms": 0.3309119939804077,
+        "p50_ms": 0.33132800459861755,
+        "p95_ms": 0.3375360071659088
+      },
+      "kernel_config": {
+        "block_k": 32,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.4227351722141704,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.33228800126484465,
+        "min_ms": 0.3300800025463104,
+        "p50_ms": 0.331712007522583,
+        "p95_ms": 0.3341119885444641
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.356516569852829,
+        "min_ms": 0.3555839955806732,
+        "p50_ms": 0.35631999373435974,
+        "p95_ms": 0.3580479919910431
+      },
+      "kernel_config": {
+        "block_k": 32,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.9309385197449171,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.16854399868420192,
+        "min_ms": 0.16361600160598755,
+        "p50_ms": 0.16620799899101257,
+        "p95_ms": 0.17814399302005768
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.1477760076522827,
+        "min_ms": 1.1372480392456055,
+        "p50_ms": 1.1435519456863403,
+        "p95_ms": 1.1624319553375244
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 4
+      },
+      "p50_speedup": 0.1453436370931601,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.14632228442600795,
+        "min_ms": 0.14377599954605103,
+        "p50_ms": 0.14560000598430634,
+        "p95_ms": 0.15113599598407745
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.9223040001732963,
+        "min_ms": 1.912160038948059,
+        "p50_ms": 1.9156479835510254,
+        "p95_ms": 1.9450880289077759
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 4
+      },
+      "p50_speedup": 0.07600561649870999,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.3337188575948988,
+        "min_ms": 0.3325119912624359,
+        "p50_ms": 0.33321601152420044,
+        "p95_ms": 0.33657601475715637
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.6458560058048792,
+        "min_ms": 1.6387840509414673,
+        "p50_ms": 1.6416000127792358,
+        "p95_ms": 1.6660799980163574
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 4
+      },
+      "p50_speedup": 0.2029824615803117,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.15063771392617906,
+        "min_ms": 0.1480959951877594,
+        "p50_ms": 0.15094399452209473,
+        "p95_ms": 0.15324799716472626
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.2023177146911621,
+        "min_ms": 0.20112000405788422,
+        "p50_ms": 0.20239999890327454,
+        "p95_ms": 0.20428800582885742
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.7457707279644292,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.1403245691742216,
+        "min_ms": 0.1371839940547943,
+        "p50_ms": 0.14105600118637085,
+        "p95_ms": 0.14319999516010284
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.32706285800252644,
+        "min_ms": 0.3251839876174927,
+        "p50_ms": 0.3263680040836334,
+        "p95_ms": 0.3301759958267212
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.43219923344637834,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.33206857102257864,
+        "min_ms": 0.33024001121520996,
+        "p50_ms": 0.3316799998283386,
+        "p95_ms": 0.3341119885444641
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.33693714652742657,
+        "min_ms": 0.3353919982910156,
+        "p50_ms": 0.33667200803756714,
+        "p95_ms": 0.3383040130138397
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.9851724880891449,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.15031771148954118,
+        "min_ms": 0.14883199334144592,
+        "p50_ms": 0.150176003575325,
+        "p95_ms": 0.15164799988269806
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.2025371449334281,
+        "min_ms": 0.20051200687885284,
+        "p50_ms": 0.20217600464820862,
+        "p95_ms": 0.20694400370121002
+      },
+      "kernel_config": {
+        "block_k": 128,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.7427983545160816,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.1573577161346163,
+        "min_ms": 0.1518400013446808,
+        "p50_ms": 0.15644800662994385,
+        "p95_ms": 0.1669439971446991
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.35977600302015034,
+        "min_ms": 0.3521600067615509,
+        "p50_ms": 0.355679988861084,
+        "p95_ms": 0.37961599230766296
+      },
+      "kernel_config": {
+        "block_k": 128,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.4398560827976378,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.3366857171058655,
+        "min_ms": 0.3322559893131256,
+        "p50_ms": 0.33641600608825684,
+        "p95_ms": 0.34540799260139465
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.3608868547848293,
+        "min_ms": 0.3526400029659271,
+        "p50_ms": 0.3601599931716919,
+        "p95_ms": 0.3705599904060364
+      },
+      "kernel_config": {
+        "block_k": 128,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.9340737796157275,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.18017371424606868,
+        "min_ms": 0.17497600615024567,
+        "p50_ms": 0.17740799486637115,
+        "p95_ms": 0.19193600118160248
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.08218971320561,
+        "min_ms": 1.068735957145691,
+        "p50_ms": 1.079327940940857,
+        "p95_ms": 1.0999360084533691
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 512,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.1643689449118898,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.1464548579284123,
+        "min_ms": 0.142752006649971,
+        "p50_ms": 0.144896000623703,
+        "p95_ms": 0.15324799716472626
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.0781714235033308,
+        "min_ms": 1.0694719552993774,
+        "p50_ms": 1.0763520002365112,
+        "p95_ms": 1.090880036354065
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 512,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.13461767209227504,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.3342994238649096,
+        "min_ms": 0.333407998085022,
+        "p50_ms": 0.3338879942893982,
+        "p95_ms": 0.3353919982910156
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.7847131661006383,
+        "min_ms": 1.7789440155029297,
+        "p50_ms": 1.7805440425872803,
+        "p95_ms": 1.8001600503921509
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 512,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.18752021084759626,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    }
+  ],
+  "protocol": {
+    "iterations": 7,
+    "timing": "CUDA events; activation quantization plus projection; weights preloaded",
+    "warmup": 3
+  },
+  "schema_version": 1
+}

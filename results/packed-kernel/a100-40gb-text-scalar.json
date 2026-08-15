@@ -1,0 +1,136 @@
+{
+  "device": {
+    "capability": [
+      8,
+      0
+    ],
+    "cuda": "12.8",
+    "name": "NVIDIA A100-SXM4-40GB",
+    "torch": "2.9.1+cu128"
+  },
+  "measurements": [
+    {
+      "activation_backend": "torch",
+      "decode_mode": "scalar",
+      "dense": {
+        "mean_ms": 0.18080426454544068,
+        "min_ms": 0.17715199291706085,
+        "p50_ms": 0.1802240014076233,
+        "p95_ms": 0.18943999707698822
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.44175360004107156,
+        "min_ms": 0.4362240135669708,
+        "p50_ms": 0.4423680007457733,
+        "p95_ms": 0.44646400213241577
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.4074074099025918,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 725944,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008014007471501827,
+        "total_values": 1602560
+      }
+    },
+    {
+      "activation_backend": "torch",
+      "decode_mode": "scalar",
+      "dense": {
+        "mean_ms": 0.30405973494052885,
+        "min_ms": 0.29900801181793213,
+        "p50_ms": 0.3031040132045746,
+        "p95_ms": 0.3123199939727783
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.9238186677296957,
+        "min_ms": 0.9164800047874451,
+        "p50_ms": 0.9210879802703857,
+        "p95_ms": 0.9338880181312561
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.3290717278881419,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1961310,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008016114006750286,
+        "total_values": 4326912
+      }
+    },
+    {
+      "activation_backend": "torch",
+      "decode_mode": "scalar",
+      "dense": {
+        "mean_ms": 0.35351893107096355,
+        "min_ms": 0.35020801424980164,
+        "p50_ms": 0.3532800078392029,
+        "p95_ms": 0.3563520014286041
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.6777514696121216,
+        "min_ms": 0.6748160123825073,
+        "p50_ms": 0.6778879761695862,
+        "p95_ms": 0.6799359917640686
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.5211480661383251,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 776843,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0014847629936411977,
+        "total_values": 1602560
+      }
+    }
+  ],
+  "protocol": {
+    "iterations": 30,
+    "timing": "CUDA events; activation quantization plus projection; weights preloaded",
+    "warmup": 10
+  },
+  "schema_version": 1
+}

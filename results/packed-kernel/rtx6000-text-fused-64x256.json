@@ -1,0 +1,130 @@
+{
+  "device": {
+    "capability": [
+      12,
+      0
+    ],
+    "cuda": "12.8",
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "torch": "2.9.1+cu128"
+  },
+  "measurements": [
+    {
+      "dense": {
+        "mean_ms": 0.1482901339729627,
+        "min_ms": 0.14473600685596466,
+        "p50_ms": 0.14793600142002106,
+        "p95_ms": 0.14982399344444275
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.18791786680618922,
+        "min_ms": 0.18512000143527985,
+        "p50_ms": 0.1876320019364357,
+        "p95_ms": 0.19203199446201324
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.7884369398251024,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 731750,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008084240835160017,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.13944853295882542,
+        "min_ms": 0.13488000631332397,
+        "p50_ms": 0.13937599956989288,
+        "p95_ms": 0.1427839994430542
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.31343146562576296,
+        "min_ms": 0.31113600730895996,
+        "p50_ms": 0.3133919984102249,
+        "p95_ms": 0.3160640001296997
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 0.44473375286197325,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1976863,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008089379407465458,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.33079786400000255,
+        "min_ms": 0.3280639946460724,
+        "p50_ms": 0.33059200644493103,
+        "p95_ms": 0.3323200047016144
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.3179061323404312,
+        "min_ms": 0.30928000807762146,
+        "p50_ms": 0.31224000453948975,
+        "p95_ms": 0.3178879916667938
+      },
+      "kernel_config": {
+        "block_k": 64,
+        "block_m": 64,
+        "block_n": 256,
+        "num_warps": 8
+      },
+      "p50_speedup": 1.0587753062984608,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 719294,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.0012943412875756621,
+        "total_values": 1602560
+      }
+    }
+  ],
+  "protocol": {
+    "iterations": 30,
+    "timing": "CUDA events; activation quantization plus projection; weights preloaded",
+    "warmup": 10
+  },
+  "schema_version": 1
+}

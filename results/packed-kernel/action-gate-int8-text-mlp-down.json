@@ -1,0 +1,28 @@
+{
+  "correctness": {
+    "allclose_atol_1e-4": false,
+    "dense_repeat_exact_match": true,
+    "dense_repeat_max_absolute_error": 0.0,
+    "exact_match": false,
+    "max_absolute_error": 0.033203125,
+    "mean_absolute_error": 0.008701584365193046,
+    "shape": [
+      8,
+      7
+    ]
+  },
+  "packing": {
+    "activation_backend": "torch",
+    "backend": "triton_direct_int8",
+    "bf16_weight_bytes_replaced": 1061683200,
+    "packed_layers": 30,
+    "packed_weight_bytes": 132710400,
+    "packed_weight_count": 530841600,
+    "scope": "text_mlp_down",
+    "triton_direct_layers": 30,
+    "weight_storage_reduction": 0.875
+  },
+  "run_id": "bitwam-world-ternary-102000-packed-direct-int8-text-mlp-down-gate",
+  "schema_version": 1,
+  "status": "rejected_before_timing"
+}

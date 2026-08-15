@@ -56,3 +56,35 @@ def test_packed_runtime_wraps_upstream_model_initialization(monkeypatch, capsys)
     assert evaluator.initialize_model("cfg") == ("model", "head")
     pack.assert_called_once_with("model", scope="text")
     assert '"backend": "eager_unpack"' in capsys.readouterr().out
+
+
+def test_packed_runtime_routes_direct_triton_candidate(monkeypatch, capsys) -> None:
+    report = Mock()
+    report.to_dict.return_value = {"packed_layers": 2}
+    direct = Mock(return_value=2)
+    monkeypatch.setattr(
+        "lerobot_policy_bitwam.bitvla_packing.pack_bitlinear_weights",
+        Mock(return_value=report),
+    )
+    monkeypatch.setattr(
+        "lerobot_policy_bitwam.bitvla_packing.enable_triton_direct_bitlinear_runtime",
+        direct,
+    )
+    evaluator = SimpleNamespace(initialize_model=lambda _cfg: ("model", "head"))
+
+    _enable_packed_runtime(
+        evaluator,
+        {
+            "packed_scope": "text",
+            "packed_runtime_backend": "triton_direct_bf16",
+            "packed_activation_backend": "hybrid",
+        },
+    )
+
+    assert evaluator.initialize_model("cfg") == ("model", "head")
+    direct.assert_called_once_with(
+        "model",
+        activation_backend="hybrid",
+        bf16_candidate=True,
+    )
+    assert '"backend": "triton_direct_bf16"' in capsys.readouterr().out

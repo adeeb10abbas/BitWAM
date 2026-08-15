@@ -1,0 +1,112 @@
+{
+  "device": {
+    "capability": [
+      12,
+      0
+    ],
+    "cuda": "12.8",
+    "name": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "torch": "2.9.1+cu128"
+  },
+  "protocol": {
+    "iterations": 10,
+    "timing": "CUDA events; activation quantization plus projection; weights preloaded",
+    "warmup": 5
+  },
+  "schema_version": 1,
+  "shapes": [
+    {
+      "dense": {
+        "mean_ms": 0.1494847998023033,
+        "min_ms": 0.14697599411010742,
+        "p50_ms": 0.1491520032286644,
+        "p95_ms": 0.15379199385643005
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.7401184022426606,
+        "min_ms": 0.7333120107650757,
+        "p50_ms": 0.7397280037403107,
+        "p95_ms": 0.7488319873809814
+      },
+      "p50_speedup": 0.20163087307023972,
+      "shape_mkn": [
+        626,
+        2560,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 13107200,
+        "packed_weight_bytes": 1638400
+      },
+      "strict_bf16_gate": {
+        "differing_values": 728639,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008022928377613425,
+        "total_values": 1602560
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.14007680118083954,
+        "min_ms": 0.13795199990272522,
+        "p50_ms": 0.13971200585365295,
+        "p95_ms": 0.14422400295734406
+      },
+      "direct_w2a8": {
+        "mean_ms": 1.1335391879081727,
+        "min_ms": 1.12118399143219,
+        "p50_ms": 1.1333279609680176,
+        "p95_ms": 1.1465599536895752
+      },
+      "p50_speedup": 0.1232758836500599,
+      "shape_mkn": [
+        626,
+        2560,
+        6912
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 1968531,
+        "exact": false,
+        "max_absolute_error": 0.015625,
+        "mean_absolute_error": 0.0008028180454857647,
+        "total_values": 4326912
+      }
+    },
+    {
+      "dense": {
+        "mean_ms": 0.33160959780216215,
+        "min_ms": 0.3285439908504486,
+        "p50_ms": 0.33110399544239044,
+        "p95_ms": 0.3359360098838806
+      },
+      "direct_w2a8": {
+        "mean_ms": 0.8013024032115936,
+        "min_ms": 0.7948480248451233,
+        "p50_ms": 0.8026880025863647,
+        "p95_ms": 0.8057600259780884
+      },
+      "p50_speedup": 0.412494013085446,
+      "shape_mkn": [
+        626,
+        6912,
+        2560
+      ],
+      "storage": {
+        "dense_weight_bytes": 35389440,
+        "packed_weight_bytes": 4423680
+      },
+      "strict_bf16_gate": {
+        "differing_values": 715979,
+        "exact": false,
+        "max_absolute_error": 0.03125,
+        "mean_absolute_error": 0.001283525605686009,
+        "total_values": 1602560
+      }
+    }
+  ]
+}

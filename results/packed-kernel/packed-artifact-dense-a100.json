@@ -1,0 +1,12 @@
+{
+  "artifact": null,
+  "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+  "dense": {
+    "cuda_allocated_bytes": 5737242112,
+    "cuda_peak_bytes": 5737242112,
+    "load_seconds": 23.93385089794174,
+    "max_rss_kib": 6960940
+  },
+  "export": null,
+  "packed_direct_load": null
+}

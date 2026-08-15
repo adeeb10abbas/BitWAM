@@ -1,0 +1,18 @@
+{
+  "artifact": "/data/users/ali/bitvla_benchmarks/packed-artifact-validation-102000-v3",
+  "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+  "dense": null,
+  "export": null,
+  "packed_direct_load": {
+    "cuda_allocated_bytes": 2092851200,
+    "cuda_peak_bytes": 2096799744,
+    "first_packed_bitlinear_forward": {
+      "finite": true,
+      "input_features": 1152,
+      "output_features": 1152
+    },
+    "load_seconds": 24.502010989934206,
+    "max_rss_kib": 3717352,
+    "meta_parameters_after_load": 0
+  }
+}

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "run_id": "packed-kernel-profile-rtx6000-1-20260815",
+  "status": "baseline-profile-complete",
+  "hardware": {
+    "pod": "lerobot-rtx6000-1-ali",
+    "namespace": "211247-prod",
+    "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+    "compute_capability": "12.0",
+    "driver": "580.105.08",
+    "torch": "2.9.1+cu128",
+    "cuda": "12.8",
+    "triton": "3.5.1"
+  },
+  "checkpoint": {
+    "path": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+    "upstream_root": "/data/users/ali/BitVLA",
+    "upstream_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7"
+  },
+  "protocol": {
+    "mode": "dense native BitVLA reference",
+    "action": "official get_bitnet_vla_action path",
+    "input": "fixed zero-valued 224x224 RGB main/wrist images, zero 8D proprioception, task 'put the black bowl on the plate'",
+    "warmup_queries": 2,
+    "timed_queries": 1,
+    "profiler": "torch.profiler CPU+CUDA with record_shapes and profile_memory",
+    "checkpoint_mutation_guard": "update_auto_map and check_model_logic_mismatch were monkeypatched to no-ops; profiler and compilation caches were directed to /tmp"
+  },
+  "remote_artifacts": {
+    "chrome_trace": "/data/users/ali/bitvla_benchmarks/profiles/packed-kernel-rtx6000-1-20260815/dense-native-626-prefill.trace.json",
+    "profiler_table": "/data/users/ali/bitvla_benchmarks/profiles/packed-kernel-rtx6000-1-20260815/dense-native-626-prefill.profiler-table.txt"
+  },
+  "shape_contract": {
+    "text_prefill_m": 626,
+    "vision_images": 2,
+    "vision_tokens_per_image": 256,
+    "prompt_tokens_before_action_slots": 569,
+    "action_slots": 56,
+    "stop_slots": 1,
+    "text_projection_shapes_n_by_k": {
+      "attention_q_o": [2560, 2560],
+      "attention_k_v": [640, 2560],
+      "mlp_gate_up": [6912, 2560],
+      "mlp_down": [2560, 6912]
+    },
+    "vision_projection_shapes_n_by_k": {
+      "attention": [1152, 1152],
+      "mlp_fc1": [4304, 1152],
+      "mlp_fc2": [1152, 4304]
+    }
+  },
+  "projection_weight_counts": {
+    "eligible_total": 2479890432,
+    "text_mlp": 1592524800,
+    "text_attention": 491520000,
+    "vision_mlp": 257826816,
+    "vision_attention": 138018816
+  },
+  "profiler_ms": {
+    "self_cuda_total": 96.803,
+    "self_cpu_total": 124.852,
+    "weight_quant_cuda_total": 45.236,
+    "activation_quant_cuda_total": 13.675,
+    "mm_self_cuda": 21.962,
+    "addmm_self_cuda": 3.965,
+    "bmm_self_cuda": 2.047,
+    "copy_self_cuda": 17.944,
+    "mul_self_cuda": 12.8,
+    "div_self_cuda": 8.704,
+    "clamp_self_cuda": 5.927,
+    "round_self_cuda": 5.406,
+    "abs_self_cuda": 4.99,
+    "cuda_launch_cpu": 37.413
+  },
+  "call_counts": {
+    "weight_quant": 366,
+    "activation_quant": 366,
+    "aten_mm": 212,
+    "aten_addmm": 163,
+    "cuda_launch_kernel": 10268
+  },
+  "tooling": {
+    "torch_profiler": "available",
+    "nsight_systems": "not installed on probed RTX/A100 pods",
+    "nsight_compute": "not installed on probed RTX/A100 pods",
+    "cuda_nvcc": "/data/users/ali/vla_wam/envs/cuda-12.8-toolkit/bin/nvcc",
+    "cutlass": "PyTorch emitted CUTLASS BF16 kernels; no standalone CUTLASS Python package or headers were found"
+  },
+  "conclusion": "The direct packed W2A8 prefill projection is the primary speed target. The existing quality-safe packed path reconstructs BF16 weights before F.linear and cannot remove the profiled quantization/decode and kernel-launch costs."
+}

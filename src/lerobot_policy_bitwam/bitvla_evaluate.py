@@ -23,6 +23,7 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
         enable_compiled_bitlinear_runtime,
         enable_compiled_bitlinear_unpack,
         enable_torch_int8_bitlinear_runtime,
+        enable_triton_direct_bitlinear_runtime,
         pack_bitlinear_weights,
     )
 
@@ -44,6 +45,14 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
             report["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
         elif backend == "torch_int8":
             report["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
+        elif backend in {"triton_direct_int8", "triton_direct_bf16"}:
+            direct_activation = str(config.get("packed_activation_backend", "torch"))
+            report["triton_direct_layers"] = enable_triton_direct_bitlinear_runtime(
+                model,
+                activation_backend=direct_activation,
+                bf16_candidate=backend == "triton_direct_bf16",
+            )
+            report["activation_backend"] = direct_activation
         elif backend != "eager_unpack":
             raise ValueError(f"Unsupported packed_runtime_backend: {backend}")
         report["backend"] = backend

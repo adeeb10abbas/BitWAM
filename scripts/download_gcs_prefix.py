@@ -81,6 +81,11 @@ def download_object(
         return "skipped", obj.size
 
     partial = target.with_name(f".{target.name}.part")
+    if partial.is_file() and partial.stat().st_size == obj.size:
+        if obj.md5 is None or _md5(partial) == obj.md5:
+            os.replace(partial, target)
+            return "downloaded", obj.size
+        partial.unlink()
     encoded_name = urllib.parse.quote(obj.name, safe="")
     url = (
         f"https://storage.googleapis.com/download/storage/v1/b/{urllib.parse.quote(bucket)}"
@@ -138,6 +143,7 @@ def main() -> int:
     expected_bytes = sum(obj.size for obj in objects)
     print(f"Found {len(objects)} objects ({expected_bytes / 2**30:.2f} GiB)", flush=True)
     counts = {"downloaded": 0, "skipped": 0}
+    failures: list[dict[str, str]] = []
     completed_bytes = 0
     with ThreadPoolExecutor(max_workers=args.workers) as executor:
         futures = {
@@ -152,7 +158,16 @@ def main() -> int:
             for obj in objects
         }
         for index, future in enumerate(as_completed(futures), 1):
-            status, size = future.result()
+            try:
+                status, size = future.result()
+            except Exception as error:
+                obj = futures[future]
+                failures.append({"object": obj.name, "error": repr(error)})
+                print(
+                    f"[{index}/{len(objects)}] FAILED {obj.name}: {error!r}",
+                    flush=True,
+                )
+                continue
             counts[status] += 1
             completed_bytes += size
             print(
@@ -160,6 +175,10 @@ def main() -> int:
                 f"{expected_bytes / 2**30:.2f} GiB {futures[future].name}",
                 flush=True,
             )
+
+    if failures:
+        print(json.dumps({"verified": False, "failures": failures}, indent=2), flush=True)
+        return 1
 
     manifest = args.manifest or args.output_dir / "download_manifest.json"
     manifest.parent.mkdir(parents=True, exist_ok=True)

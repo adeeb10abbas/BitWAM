@@ -30,6 +30,24 @@ def build_parser() -> argparse.ArgumentParser:
         default=16,
         help="Maximum concurrent trajectory-map calls (default: 16).",
     )
+    parser.add_argument(
+        "--iterator-prefetch",
+        type=int,
+        default=2,
+        help="Maximum trajectories prefetched by the statistics iterator (default: 2).",
+    )
+    parser.add_argument(
+        "--autotune-ram-budget-gb",
+        type=int,
+        default=8,
+        help="tf.data AUTOTUNE RAM budget inside the pod (default: 8 GiB).",
+    )
+    parser.add_argument(
+        "--private-threadpool-size",
+        type=int,
+        default=16,
+        help="Private tf.data worker-pool size (default: 16).",
+    )
     return parser
 
 
@@ -52,8 +70,16 @@ def main() -> int:
     args = build_parser().parse_args()
     if not re.fullmatch(r"train(?:\[\d*%?:\d*%?\])?", args.split):
         raise SystemExit("split must be a deterministic slice of the train split")
-    if args.num_parallel_reads < 1 or args.num_parallel_calls < 1:
-        raise SystemExit("parallel read and call limits must be positive")
+    if (
+        args.num_parallel_reads < 1
+        or args.num_parallel_calls < 1
+        or args.iterator_prefetch < 0
+        or args.autotune_ram_budget_gb < 1
+        or args.private_threadpool_size < 1
+    ):
+        raise SystemExit(
+            "parallel limits and RAM budget must be positive; prefetch may be zero"
+        )
     upstream_root = args.upstream_root.expanduser().resolve()
     openvla_root = upstream_root / "openvla-oft"
     if not (openvla_root / "prismatic/vla/datasets/datasets.py").is_file():
@@ -63,9 +89,11 @@ def main() -> int:
     sys.argv = ["prepare_droid_statistics.py", "droid"]
 
     import dlimp as dl
+    import tensorflow as tf
 
     original_from_rlds = dl.DLataset.from_rlds
     original_traj_map = dl.DLataset.traj_map
+    original_iterator = dl.DLataset.iterator
 
     def from_rlds(builder, split="train", shuffle=True, num_parallel_reads=-1):
         builder_name = str(getattr(builder, "name", "")).lower()
@@ -74,7 +102,7 @@ def main() -> int:
             "train",
         }:
             split = args.split
-        return original_from_rlds(
+        dataset = original_from_rlds(
             builder,
             split=split,
             shuffle=shuffle,
@@ -82,6 +110,11 @@ def main() -> int:
                 num_parallel_reads, args.num_parallel_reads
             ),
         )
+        options = tf.data.Options()
+        options.autotune.ram_budget = args.autotune_ram_budget_gb * 2**30
+        options.threading.private_threadpool_size = args.private_threadpool_size
+        options.threading.max_intra_op_parallelism = 1
+        return dataset.with_options(options)
 
     dl.DLataset.from_rlds = staticmethod(from_rlds)
 
@@ -96,6 +129,16 @@ def main() -> int:
         )
 
     dl.DLataset.traj_map = traj_map
+
+    def iterator(self, *, prefetch=-1):
+        prefetch = (
+            args.iterator_prefetch
+            if prefetch < 0
+            else min(prefetch, args.iterator_prefetch)
+        )
+        return original_iterator(self, prefetch=prefetch)
+
+    dl.DLataset.iterator = iterator
 
     from prismatic.vla.datasets.rlds import dataset as rlds_dataset
 
@@ -125,6 +168,11 @@ def main() -> int:
         "split": args.split,
         "dataset_length": len(dataset),
         "elapsed_seconds": time.time() - started,
+        "num_parallel_reads": args.num_parallel_reads,
+        "num_parallel_calls": args.num_parallel_calls,
+        "iterator_prefetch": args.iterator_prefetch,
+        "autotune_ram_budget_gb": args.autotune_ram_budget_gb,
+        "private_threadpool_size": args.private_threadpool_size,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary = args.output.with_suffix(f"{args.output.suffix}.tmp")

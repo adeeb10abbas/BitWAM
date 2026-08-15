@@ -1,0 +1,24 @@
+{
+  "successes": 10,
+  "episodes": 10,
+  "success_rate": 1.0,
+  "evaluation_seconds_from_log": 158.0,
+  "action_loss_at_checkpoint": 0.0312957764,
+  "world_loss_at_checkpoint": 0.0554716005,
+  "world_cosine_similarity": 0.9445283995,
+  "world_shuffled_action_loss": 0.2700256635,
+  "world_action_conditioning_gap": 0.2145540602,
+  "world_contrastive_loss": 0.0038880159,
+  "per_task": [
+    {"task_id": 0, "successes": 1, "episodes": 1},
+    {"task_id": 1, "successes": 1, "episodes": 1},
+    {"task_id": 2, "successes": 1, "episodes": 1},
+    {"task_id": 3, "successes": 1, "episodes": 1},
+    {"task_id": 4, "successes": 1, "episodes": 1},
+    {"task_id": 5, "successes": 1, "episodes": 1},
+    {"task_id": 6, "successes": 1, "episodes": 1},
+    {"task_id": 7, "successes": 1, "episodes": 1},
+    {"task_id": 8, "successes": 1, "episodes": 1},
+    {"task_id": 9, "successes": 1, "episodes": 1}
+  ]
+}

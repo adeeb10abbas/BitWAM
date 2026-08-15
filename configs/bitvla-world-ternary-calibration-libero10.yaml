@@ -1,5 +1,5 @@
 architecture: bitvla
-config_revision: 7d05cc0
+config_revision: 9d80572
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: ternary_world_head_calibration

@@ -17,6 +17,7 @@ import numpy as np
 import torch
 
 from lerobot_policy_bitwam.bitvla_evaluate import _load_upstream_evaluator
+from lerobot_policy_bitwam.bitvla_packing import pack_bitlinear_weights
 from lerobot_policy_bitwam.bitvla_world import LatentWorldModelHead
 from lerobot_policy_bitwam.workflows import load_config
 
@@ -151,6 +152,11 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     model, action_head, proprio_projector, noisy_action_projector, processor = (
         evaluator.initialize_model(cfg)
     )
+    packing = None
+    if bool(config.get("packed_runtime", False)):
+        packing = pack_bitlinear_weights(model).to_dict()
+        gc.collect()
+        torch.cuda.empty_cache()
     model.set_constant(
         image_token_idx=evaluator.BITNET_DEFAULT_IMAGE_TOKEN_IDX,
         proprio_pad_idx=evaluator.BITNET_PROPRIO_PAD_IDX,
@@ -219,7 +225,9 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
                 "official get_action, including input preprocessing and synchronized CUDA inference"
             ),
             "input": "fixed seeded 224x224 RGB main/wrist images and zero proprioception",
+            "packed_runtime": packing is not None,
         },
+        "packing": packing,
         "load_seconds": load_seconds,
         "latency": latency,
         "latency_samples_ms": latencies_ms,

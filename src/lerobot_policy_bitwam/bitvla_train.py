@@ -246,6 +246,7 @@ def _install_future_frame_patch() -> None:
 def _install_rlds_split_patch() -> None:
     """Apply the configured DROID train/holdout slice before statistics or decoding."""
     import dlimp as dl
+    from prismatic.vla.datasets.rlds import dataset as rlds_dataset
 
     original = dl.DLataset.from_rlds
 
@@ -263,6 +264,17 @@ def _install_rlds_split_patch() -> None:
         )
 
     dl.DLataset.from_rlds = staticmethod(from_rlds)
+
+    original_statistics = rlds_dataset.get_dataset_statistics
+
+    def get_dataset_statistics(dataset, hash_dependencies, save_dir=None):
+        assert _RUNTIME is not None
+        dependencies = tuple(hash_dependencies)
+        if _RUNTIME.rlds_split is not None:
+            dependencies += (f"rlds_split={_RUNTIME.rlds_split}",)
+        return original_statistics(dataset, dependencies, save_dir)
+
+    rlds_dataset.get_dataset_statistics = get_dataset_statistics
 
 
 def _install_dataset_statistics_patch() -> None:

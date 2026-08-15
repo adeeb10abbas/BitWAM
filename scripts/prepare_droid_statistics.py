@@ -61,6 +61,16 @@ def main() -> int:
 
     dl.DLataset.from_rlds = staticmethod(from_rlds)
 
+    from prismatic.vla.datasets.rlds import dataset as rlds_dataset
+
+    original_statistics = rlds_dataset.get_dataset_statistics
+
+    def get_dataset_statistics(dataset, hash_dependencies, save_dir=None):
+        dependencies = tuple(hash_dependencies) + (f"rlds_split={args.split}",)
+        return original_statistics(dataset, dependencies, save_dir)
+
+    rlds_dataset.get_dataset_statistics = get_dataset_statistics
+
     from prismatic.vla.datasets.datasets import RLDSDataset
 
     started = time.time()

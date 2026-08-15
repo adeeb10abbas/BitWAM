@@ -37,8 +37,8 @@ learning_rate: 0.00001
 # Keep the visual target space fixed while world gradients update the action-token pathway.
 lr_vit: 0.0
 warmup_steps: 375
-max_steps: 110000
-save_freq: 5000
+max_steps: 102000
+save_freq: 1000
 save_latest_checkpoint_only: false
 shuffle_buffer_size: 10000
 image_aug: true

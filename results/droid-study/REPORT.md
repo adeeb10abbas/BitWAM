@@ -30,7 +30,7 @@ stage definitions are preregistered in `docs/DROID_STUDY.md`.
 | --- | --- | --- |
 | DROID-100 object integrity | 33 objects; 2,192,615,094 bytes; per-object MD5 | passed |
 | DROID-100 schema/gradient | two optimizer steps on one B200 | passed |
-| Full DROID 1.0.1 object integrity | 2,050 objects; per-object size and MD5 | running |
+| Full DROID 1.0.1 object integrity | 2,050 objects; 2,048 TFRecord shards; 95,658 episodes; per-object size and MD5 | running |
 | Full train statistics | deterministic `train[:99%]`, cache keyed by split | pending full transfer |
 | Full-release gradient | two optimizer steps on one B200 | pending statistics |
 

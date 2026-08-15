@@ -6,6 +6,8 @@ VLA-JEPA action generation and world-model supervision.
 The implementation follows [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
 The research claims and matched ablations are defined in
 [`docs/PAPER_PLAN.md`](docs/PAPER_PLAN.md).
+The living manuscript is in [`docs/PAPER_DRAFT.md`](docs/PAPER_DRAFT.md); pending
+result cells are filled only from archived closed-loop artifacts.
 Large datasets, checkpoints, simulator output, and videos stay outside Git.
 
 ## Setup

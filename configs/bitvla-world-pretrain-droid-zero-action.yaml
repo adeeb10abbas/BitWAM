@@ -1,34 +1,33 @@
 architecture: bitvla
 config_revision: d9cf174
-world_action_mode: normal
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
-stage: droid_frozen_world_pretrain
+stage: droid_frozen_world_pretrain_zero_action
 seed: 0
-num_processes: 4
+num_processes: 2
 rlds_split: train[:99%]
 
-# Stage P: fit an action-conditioned future-latent head while preserving the
-# released BitVLA controller. Global effective batch = 4 * 8 * 8 = 256.
+# Matched visual-only control. The update count and global batch match Stage P;
+# two A100 ranks use twice the accumulation of the four-B200 primary run.
 freeze_policy: true
 world_loss_weight: 1.0
 world_learning_rate: 0.0001
 world_hidden_dim: 2048
 world_action_embedding_dim: 256
 world_head_precision: bf16
+world_action_mode: zero
 world_contrastive_weight: 0.0
 world_contrastive_margin: 0.05
 save_backbone: false
-metrics_path: /data/users/ali/bitvla_runs/bitwam-droid-pretrain/metrics.jsonl
+metrics_path: /data/users/ali/bitvla_runs/bitwam-droid-pretrain-zero-action/metrics.jsonl
 
-output_dir: /data/users/ali/bitvla_runs/bitwam-droid-pretrain
-run_id: bitvla-world-pretrain-droid-seed0
-
+output_dir: /data/users/ali/bitvla_runs/bitwam-droid-pretrain-zero-action
+run_id: bitvla-world-pretrain-droid-zero-action-seed0
 vla_path: /data/users/ali/bitvla_models/ft-libero-long
 data_root_dir: /data/users/ali/bitvla_data/droid_rlds
 dataset_name: droid
 run_root_dir: /data/users/ali/bitvla_runs
-run_id_override: bitwam-droid-pretrain
+run_id_override: bitwam-droid-pretrain-zero-action
 resume: true
 resume_step: 100000
 use_l1_regression: true
@@ -36,7 +35,7 @@ use_lora: false
 num_images_in_input: 2
 use_proprio: false
 batch_size: 8
-grad_accumulation_steps: 8
+grad_accumulation_steps: 16
 learning_rate: 0.000005
 lr_vit: 0.0
 warmup_steps: 500

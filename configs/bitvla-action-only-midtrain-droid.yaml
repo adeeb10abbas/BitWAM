@@ -2,34 +2,32 @@ architecture: bitvla
 config_revision: d9cf174
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
-stage: droid_joint_action_world_midtrain
+stage: droid_action_only_midtrain
 seed: 0
 num_processes: 4
 rlds_split: train[:99%]
 
-# Stage M: adapt the action-token pathway after the frozen-head stage. Vision
-# remains frozen so the future target space cannot move under its own loss.
+# Matched Stage-M controller control: the world computation is present but its
+# objective and optimizer learning rate are zero.
 freeze_policy: false
-world_loss_weight: 0.1
-world_contrastive_weight: 1.0
-world_contrastive_margin: 0.05
-world_learning_rate: 0.0001
+world_loss_weight: 0.0
+world_learning_rate: 0.0
 world_hidden_dim: 2048
 world_action_embedding_dim: 256
 world_head_precision: bf16
 world_action_mode: normal
-world_checkpoint: /data/users/ali/bitvla_runs/bitwam-droid-pretrain--120000_chkpt/world_model--120000_checkpoint.pt
+world_contrastive_weight: 0.0
+world_contrastive_margin: 0.05
 save_backbone: true
-metrics_path: /data/users/ali/bitvla_runs/bitwam-droid-midtrain/metrics.jsonl
+metrics_path: /data/users/ali/bitvla_runs/bitvla-action-only-droid-midtrain/metrics.jsonl
 
-output_dir: /data/users/ali/bitvla_runs/bitwam-droid-midtrain
-run_id: bitvla-world-midtrain-droid-seed0
-
+output_dir: /data/users/ali/bitvla_runs/bitvla-action-only-droid-midtrain
+run_id: bitvla-action-only-midtrain-droid-seed0
 vla_path: /data/users/ali/bitvla_models/ft-libero-long
 data_root_dir: /data/users/ali/bitvla_data/droid_rlds
 dataset_name: droid
 run_root_dir: /data/users/ali/bitvla_runs
-run_id_override: bitwam-droid-midtrain
+run_id_override: bitvla-action-only-droid-midtrain
 resume: true
 resume_step: 100000
 use_l1_regression: true

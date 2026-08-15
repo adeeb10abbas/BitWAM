@@ -2,35 +2,31 @@ architecture: bitvla
 config_revision: d9cf174
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
-stage: droid_to_libero_joint_posttrain
+stage: droid_to_libero_action_only_posttrain
 seed: 0
 num_processes: 4
 
-# Stage F: transfer the DROID-adapted backbone/action head and world head to
-# LIBERO, restore the exact released LIBERO proprio projector, and calibrate
-# the world head to ternary weights during closed-loop task adaptation.
 freeze_policy: false
-world_loss_weight: 0.1
-world_contrastive_weight: 1.0
-world_contrastive_margin: 0.05
-world_learning_rate: 0.0001
+world_loss_weight: 0.0
+world_learning_rate: 0.0
 world_hidden_dim: 2048
 world_action_embedding_dim: 256
-world_head_precision: ternary
+world_head_precision: bf16
 world_action_mode: normal
-world_checkpoint: /data/users/ali/bitvla_runs/bitwam-droid-midtrain--105000_chkpt/world_model--105000_checkpoint.pt
+world_checkpoint: /data/users/ali/bitvla_runs/bitvla-action-only-droid-midtrain--105000_chkpt/world_model--105000_checkpoint.pt
+world_contrastive_weight: 0.0
+world_contrastive_margin: 0.05
 proprio_checkpoint: /data/users/ali/bitvla_models/ft-libero-long/proprio_projector--100000_checkpoint.pt
 save_backbone: true
-metrics_path: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain/metrics.jsonl
+metrics_path: /data/users/ali/bitvla_runs/bitvla-action-only-droid-libero-posttrain/metrics.jsonl
 
-output_dir: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain
-run_id: bitvla-world-posttrain-droid-libero10-seed0
-
-vla_path: /data/users/ali/bitvla_runs/bitwam-droid-midtrain--105000_chkpt
+output_dir: /data/users/ali/bitvla_runs/bitvla-action-only-droid-libero-posttrain
+run_id: bitvla-action-only-posttrain-droid-libero10-seed0
+vla_path: /data/users/ali/bitvla_runs/bitvla-action-only-droid-midtrain--105000_chkpt
 data_root_dir: /data/users/ali/bitvla_data/modified_libero_rlds
 dataset_name: libero_10_no_noops
 run_root_dir: /data/users/ali/bitvla_runs
-run_id_override: bitwam-droid-libero-posttrain
+run_id_override: bitvla-action-only-droid-libero-posttrain
 resume: true
 resume_step: 105000
 use_l1_regression: true

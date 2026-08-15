@@ -207,6 +207,14 @@ def _evaluation_checkpoint(config: dict[str, Any]) -> str:
 
 def build_evaluate_command(config: dict[str, Any]) -> tuple[str, ...]:
     """Translate a config to a 50-episode LIBERO-10 evaluation command."""
+    if config.get("architecture") == "bitvla":
+        return (
+            sys.executable,
+            "-m",
+            "lerobot_policy_bitwam.bitvla_evaluate",
+            "--config",
+            str(_required(config, "_config_path")),
+        )
     episodes = int(config.get("episodes", 50))
     task_count = int(config.get("task_count", 10))
     if episodes % task_count:

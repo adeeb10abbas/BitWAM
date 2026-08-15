@@ -151,6 +151,13 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     model, action_head, proprio_projector, noisy_action_projector, processor = (
         evaluator.initialize_model(cfg)
     )
+    model.set_constant(
+        image_token_idx=evaluator.BITNET_DEFAULT_IMAGE_TOKEN_IDX,
+        proprio_pad_idx=evaluator.BITNET_PROPRIO_PAD_IDX,
+        ignore_idx=evaluator.BITNET_IGNORE_INDEX,
+        action_token_begin_idx=evaluator.BITNET_ACTION_TOKEN_BEGIN_IDX,
+        stop_index=evaluator.BITNET_STOP_INDEX,
+    )
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - load_started
     free_after_load, _ = torch.cuda.mem_get_info()

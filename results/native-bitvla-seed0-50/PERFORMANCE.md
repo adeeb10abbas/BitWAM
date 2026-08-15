@@ -1,5 +1,10 @@
 # Native BitVLA and BitWAM systems profile
 
+> Follow-up: [`PACKED_RUNTIME.md`](PACKED_RUNTIME.md) reports the implemented packed
+> inference runtime. Its recommended exact text-packed mode reduces resident CUDA
+> memory by 62.08%, preserves 10/10 smoke success, and measures a 0.79% lower p50.
+> The measurements below describe the earlier unpacked checkpoints.
+
 The saved seed-0 policies were measured in two independent processes each on the
 same NVIDIA B200. Every run used batch size 1, a fixed seed-0 pair of 224x224 RGB
 images, zero proprioception, 20 warmup queries, and 100 timed queries. Timing covers

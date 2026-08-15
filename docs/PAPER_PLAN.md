@@ -113,10 +113,17 @@ the predictor learned action-dependent dynamics rather than scene similarity.
   allocation and 6.032 GiB query peak for all four action paths. Mean p50 latency is
   108.69–110.54 ms across methods; the unchanged graph supports a zero-overhead
   result, not a BitWAM speedup.
-- The current ternary head retains 21.046 MiB of BF16 parameters, is slower and more
-  memory-intensive than the BF16 head during isolated training steps, and therefore
-  is not a packed-runtime result. Simple two-bit packing would theoretically reduce
-  the complete head to 2.647 MiB, but this remains unimplemented.
+- A new exact packed runtime stores four ternary codes per byte. Text-backbone packing
+  returns bit-identical actions, passes 10/10 ordered smoke rollouts, reduces resident
+  CUDA allocation from 5.433 to 2.060 GiB (62.08%), and measures mean p50 107.82 ms
+  versus 108.69 ms dense across two 100-query runs. Its mean p95 is worse, so this is
+  a small median result rather than a broad latency claim.
+- Full exact packing reduces resident allocation to 1.427 GiB (73.73%) and passes
+  10/10, but raises p50 by 5.22%. Activation fusion reaches 106.93 ms p50 but changes
+  actions and scores 9/10, so it is an ablation rather than the selected runtime.
+- The standard loader still reads the dense 5.403-GiB artifact before packing; disk
+  size and startup peak are not yet reduced. The training-only ternary head also
+  retains 21.046 MiB of BF16 master parameters.
 
 These observations establish that the method works in closed loop, but do not yet
 establish a control benefit over action-only across training seeds.

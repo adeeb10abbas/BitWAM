@@ -35,6 +35,8 @@ Per-task successes out of five, in evaluator order:
 This is a single training seed and must not be presented as the final paper matrix.
 
 The matched B200 latency, VRAM, deploy-size, and auxiliary-head measurements are in
-[`PERFORMANCE.md`](PERFORMANCE.md). They establish identical deployment memory and
-no attributable inference speedup: BitWAM removes its predictor from the action
-path. The current on-the-fly ternary head is a QAT simulation, not a packed runtime.
+[`PERFORMANCE.md`](PERFORMANCE.md). A subsequent implementation and systems study
+is in [`PACKED_RUNTIME.md`](PACKED_RUNTIME.md): exact text packing preserves 10/10
+ordered smoke success while reducing resident CUDA memory by 62.08% and measuring
+a small 0.79% p50 improvement. It does not change the single-seed statistical limits
+of the 50-rollout control result above.

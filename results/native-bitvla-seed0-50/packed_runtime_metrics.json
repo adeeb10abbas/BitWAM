@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "hardware": {
+    "gpu": "NVIDIA B200",
+    "compute_capability": "10.0",
+    "torch": "2.9.1+cu128",
+    "cuda": "12.8"
+  },
+  "protocol": {
+    "independent_process_runs": 2,
+    "batch_size": 1,
+    "action_chunk_size": 8,
+    "warmup_queries_per_run": 20,
+    "timed_queries_per_run": 100,
+    "timing_scope": "official get_action including preprocessing and synchronized CUDA inference",
+    "input": "fixed seed-0 224x224 RGB main/wrist images and zero proprioception",
+    "correctness": "dense reference and packed query on identical input in each process"
+  },
+  "dense_reference": {
+    "mean_p50_ms": 108.68571125,
+    "p50_run_range_ms": [108.609521, 108.7619015],
+    "mean_p95_ms": 114.933336575,
+    "mean_latency_ms": 109.54260715,
+    "cuda_allocated_after_load_bytes": 5833370624,
+    "cuda_peak_allocated_during_query_bytes": 6476575744,
+    "deployment_bytes": 5801049511
+  },
+  "packed_text_exact": {
+    "recommended": true,
+    "scope": "210 text BitLinear layers",
+    "packed_weight_count": 2084044800,
+    "bf16_weight_bytes_replaced": 4168089600,
+    "packed_weight_bytes": 521011200,
+    "eligible_matrix_storage_reduction_fraction": 0.875,
+    "mean_p50_ms": 107.8243755,
+    "p50_run_range_ms": [107.197928, 108.450823],
+    "mean_p95_ms": 118.840630625,
+    "mean_latency_ms": 108.912334315,
+    "median_latency_reduction_fraction": 0.007925013694014882,
+    "cuda_allocated_after_load_bytes_mean": 2211881984,
+    "cuda_peak_allocated_during_query_bytes_mean": 2846899712,
+    "loaded_cuda_reduction_fraction": 0.6208226552758804,
+    "query_peak_cuda_reduction_fraction": 0.5604313414171968,
+    "parameter_and_buffer_storage_bytes": 2186222230,
+    "packed_action_max_absolute_error": 0.0,
+    "packed_action_exact_match": true,
+    "libero_10_smoke": {"successes": 10, "episodes": 10}
+  },
+  "packed_all_exact": {
+    "scope": "all 366 BitLinear layers",
+    "packed_weight_count": 2479890432,
+    "bf16_weight_bytes_replaced": 4959780864,
+    "packed_weight_bytes": 619972608,
+    "eligible_matrix_storage_reduction_fraction": 0.875,
+    "mean_p50_ms": 114.357719,
+    "p50_run_range_ms": [112.0125835, 116.7028545],
+    "mean_p95_ms": 128.459377675,
+    "mean_latency_ms": 116.523468045,
+    "median_latency_increase_fraction": 0.05218724416269582,
+    "cuda_allocated_after_load_bytes": 1532536832,
+    "cuda_peak_allocated_during_query_bytes": 2168037888,
+    "loaded_cuda_reduction_fraction": 0.7372810797006021,
+    "query_peak_cuda_reduction_fraction": 0.6652493580410136,
+    "parameter_and_buffer_storage_bytes": 1493492998,
+    "packed_action_max_absolute_error": 0.0,
+    "packed_action_exact_match": true,
+    "libero_10_smoke": {"successes": 10, "episodes": 10}
+  },
+  "packed_all_fused_ablation": {
+    "recommended": false,
+    "mean_p50_ms": 106.92893525,
+    "p50_run_range_ms": [105.9780235, 107.879847],
+    "mean_p95_ms": 113.601567725,
+    "mean_latency_ms": 107.819825475,
+    "median_latency_reduction_fraction": 0.016163817486173904,
+    "packed_action_max_absolute_error": 0.083984375,
+    "packed_action_mean_absolute_error": 0.016825419304989507,
+    "packed_action_exact_match": false,
+    "libero_10_smoke": {"successes": 9, "episodes": 10},
+    "rejection_reason": "activation fusion changed actions and reproducibly failed a task passed by exact modes"
+  },
+  "startup_and_storage_caveat": {
+    "checkpoint_is_still_dense": true,
+    "deployment_bytes": 5801049511,
+    "peak_cuda_during_dense_reference_pack_and_validation_bytes": 6514358784,
+    "note": "The current loader reads the BF16 checkpoint before in-memory packing; packed serialization and direct low-memory loading remain future work."
+  },
+  "conclusion": {
+    "resident_memory_reduction_demonstrated": true,
+    "quality_preserving_mode_demonstrated": true,
+    "recommended_mode": "packed_text_exact",
+    "small_median_latency_improvement_measured": true,
+    "tail_latency_improvement_demonstrated": false,
+    "packed_checkpoint_implemented": false
+  }
+}

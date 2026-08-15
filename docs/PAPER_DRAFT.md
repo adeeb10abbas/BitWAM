@@ -22,7 +22,11 @@ matched action-only post-training, ternary-head BitWAM, and BF16-head BitWAM ach
 gate and raises the correct-versus-shuffled cosine gap from approximately `5e-4` to
 0.215. Its two-point advantage over action-only is unresolved, however (paired
 bootstrap 95% interval `[-8,+12]` points; exact McNemar p=1.0). Additional training
-seeds are required for a control-improvement claim.
+seeds are required for a control-improvement claim. An exact packed inference mode
+for the text backbone reduces resident CUDA allocation by 62.1%, returns bit-identical
+actions, retains 10/10 ordered smoke success, and measures a 0.79% lower median query
+latency on one B200; disk size and startup peak remain unchanged because conversion
+currently occurs after dense loading.
 
 ## 1. Introduction
 
@@ -47,7 +51,7 @@ BitVLA supplies the controller and released checkpoint. We investigate how to ad
 predictive post-training under the same extreme-quantization constraint while
 preserving closed-loop behavior and zero auxiliary-model inference overhead.
 
-The paper makes three empirical and methodological contributions:
+The paper makes four empirical and methodological contributions:
 
 1. A three-stage recipe—BF16 predictor pretraining, ternary calibration, and joint
    post-training—that preserves the released native ternary controller rather than
@@ -56,6 +60,8 @@ The paper makes three empirical and methodological contributions:
    that expose the static-scene shortcut hidden by high future-latent cosine.
 3. A matched evaluation against released control, continued action-only training,
    and a BF16 predictor ablation, with the predictive branch removed at deployment.
+4. A quality-gated packed runtime study that separates an exact 62%-memory-reduction
+   operating point from a faster activation-fused variant that fails the control gate.
 
 ## 2. Related work
 
@@ -149,7 +155,11 @@ predictor weights are loaded into ternary-forward layers and calibrated with the
 controller still frozen. Third, the controller and predictor are updated jointly at
 a conservative policy learning rate while the target encoder remains fixed. The
 predictor is discarded for evaluation and deployment; inference executes the native
-BitVLA action path only.
+BitVLA action path only. For memory-efficient deployment, an optional runtime packs
+four ternary codes per byte and compiles weight decoding on CUDA. The primary packed
+mode converts the text backbone only and retains BitVLA's original activation
+quantization exactly. Full packing and activation fusion are evaluated as systems
+ablations rather than assumed to preserve control.
 
 ## 4. Experimental protocol
 
@@ -165,7 +175,9 @@ calls to the official action path using fixed seeded inputs. The timed scope inc
 input preprocessing and returns an eight-action chunk. We report CUDA allocation
 after load, peak allocation during a query, and only the files needed by that action
 path. We separately benchmark the training-only predictor at batch 8 with the world
-and shuffled-action contrastive forwards plus backward.
+and shuffled-action contrastive forwards plus backward. Packed-runtime comparisons
+use the same two-process, 20-warmup, 100-query protocol and additionally compare each
+packed action tensor against a dense reference on identical input.
 
 The comparison matrix is:
 
@@ -249,6 +261,23 @@ not attributable to BitWAM. The systems result is zero added deployment cost, no
 speedup. The 21.05 MiB predictor checkpoint is excluded from the 5.403 GiB deploy
 set.
 
+We then activate packed inference for the ternary controller:
+
+| Runtime | Mean p50 | Mean p95 | Loaded VRAM | Query peak | Action error | Ordered smoke |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Dense BitWAM | 108.69 ms | 114.93 ms | 5.433 GiB | 6.032 GiB | reference | 10/10 |
+| Exact text packing | **107.82 ms** | 118.84 ms | **2.060 GiB** | **2.651 GiB** | **0** | **10/10** |
+| Exact full packing | 114.36 ms | 128.46 ms | **1.427 GiB** | **2.019 GiB** | **0** | **10/10** |
+| Full packing + fused activation | 106.93 ms | 113.60 ms | 1.427 GiB | 2.019 GiB | max 0.084 | 9/10 |
+
+Exact text packing is the selected operating point. It reduces resident allocation
+by 62.08% and query peak by 56.04%; its mean p50 is 0.79% lower and mean request
+latency is 0.58% lower, although mean p95 is 3.40% higher. Full exact packing reaches
+73.73% resident reduction but adds 5.22% to p50. Activation fusion is slightly faster
+but changes actions and reproducibly loses the bottom-drawer smoke task, so it is
+rejected. These results demonstrate a memory reduction and a small measured median
+improvement, not a tail-latency speedup.
+
 The isolated BF16 and ternary-QAT predictors both store 21.046 MiB of BF16
 parameters. Across two runs, BF16 p50 remains 3.289–3.300 ms, whereas ternary-QAT
 p50 ranges from 3.357–9.498 ms and uses 131.344 MiB peak allocation versus 81.825
@@ -269,9 +298,11 @@ The current evidence is limited to simulation, one training seed, and five rollo
 per task. The auxiliary objective predicts a visual representation, not full physical
 state, and the shuffled-action negative tests dependence rather than causal
 correctness. Results on one released controller do not establish generality across
-VLA families. The ternary predictor currently simulates quantization with BF16
-master weights; theoretical packed size must not be presented as measured memory or
-speed. We therefore avoid “first 1-bit world-action model” and control
+VLA families. The training-only ternary predictor still retains BF16 master weights;
+the new packed systems result applies to the deployed BitVLA controller. Packing is
+performed after dense checkpoint loading, so it does not yet reduce the 5.403-GiB
+artifact or the roughly 6.07-GiB startup/validation peak. We therefore avoid “first
+1-bit world-action model” and control
 improvement claims unless the related-work audit and paired multi-seed results
 support them.
 

@@ -22,6 +22,8 @@ LIBERO evaluation. Predictor loss is a representation diagnostic, not task succe
 - VLA-JEPA and V-JEPA 2-AC establish leakage-free latent future prediction and
   action-conditioned latent dynamics.
 - LaWAM feeds predicted latent subgoals back into a policy at inference time.
+- WLA-0 uses a World Expert whose prediction can be disabled at inference, so
+  training-only prediction is prior art rather than a BitWAM novelty claim.
 - BitWAM studies compression-aware auxiliary world modeling: a ternary predictor
   changes the policy through training gradients and is removed at inference, so the
   deployed controller has no additional world-model latency.
@@ -114,3 +116,4 @@ benefit.
 - V-JEPA 2: <https://arxiv.org/abs/2506.09985>
 - VLA-JEPA: <https://arxiv.org/abs/2602.10098>
 - LaWAM: <https://arxiv.org/abs/2606.15768>
+- WLA-0: <https://arxiv.org/abs/2606.05979>

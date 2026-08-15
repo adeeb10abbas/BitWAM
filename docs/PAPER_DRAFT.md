@@ -70,9 +70,12 @@ post-training of that substrate.
 V-JEPA 2 and its action-conditioned variant motivate prediction in a learned visual
 representation rather than pixel reconstruction. VLA-JEPA applies joint-embedding
 prediction to VLA learning. LaWAM uses predicted latent subgoals in a world-action
-model. BitWAM differs operationally by treating prediction as a training-only
-auxiliary objective and enforcing ternary matrices in the predictive head, so the
-deployed action path is unchanged.
+model. WLA-0 uses an auxiliary World Expert whose prediction can be disabled during
+inference or enabled for test-time scaling. Consequently, training-only prediction
+is not itself our novelty. BitWAM instead isolates compression-aware predictive
+post-training of a released native ternary controller: staged BF16-to-ternary
+predictor calibration, a ternary auxiliary head, and an explicit shuffled-action
+dependence objective, with the deployed action path unchanged.
 
 ## 3. Method
 
@@ -213,3 +216,5 @@ support them.
   <https://arxiv.org/abs/2602.10098>
 - *LaWAM: A Latent World Action Model for Vision-Language-Action Control.*
   <https://arxiv.org/abs/2606.15768>
+- *World-Language-Action Model for Unified World Modeling, Language Reasoning, and
+  Action Synthesis.* <https://arxiv.org/abs/2606.05979>

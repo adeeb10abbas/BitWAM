@@ -3,6 +3,8 @@ from pathlib import Path
 import pytest
 
 from lerobot_policy_bitwam.bitvla_train import (
+    _is_droid_dataset_name,
+    _minimum_droid_trajectory_length,
     build_upstream_argv,
     parse_runtime_config,
 )
@@ -78,6 +80,17 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
 def test_runtime_config_allows_zero_weight_for_action_only_ablation(tmp_path: Path) -> None:
     runtime = parse_runtime_config(_config(tmp_path) | {"world_loss_weight": 0})
     assert runtime.world_loss_weight == 0
+
+
+@pytest.mark.parametrize("name", ("droid", "droid_100", "r2d2_faceblur"))
+def test_droid_dataset_names_are_detected(name: str) -> None:
+    assert _is_droid_dataset_name(name)
+
+
+def test_droid_future_target_requires_frame_after_action_chunk() -> None:
+    assert _minimum_droid_trajectory_length(8) == 9
+    with pytest.raises(ValueError, match="positive"):
+        _minimum_droid_trajectory_length(0)
 
 
 def test_runtime_config_rejects_negative_world_loss(tmp_path: Path) -> None:

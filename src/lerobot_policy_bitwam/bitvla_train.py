@@ -110,6 +110,18 @@ _EXAMPLES_SEEN = 0
 _FIRST_FORWARD_TIME: float | None = None
 
 
+def _is_droid_dataset_name(name: str) -> bool:
+    normalized = name.lower()
+    return "droid" in normalized or normalized == "r2d2_faceblur"
+
+
+def _minimum_droid_trajectory_length(action_chunk_size: int) -> int:
+    """Require one observation after the complete action chunk."""
+    if action_chunk_size < 1:
+        raise ValueError("action_chunk_size must be positive")
+    return action_chunk_size + 1
+
+
 def _required(config: dict[str, Any], key: str) -> Any:
     if key not in config:
         raise ValueError(f"Missing required BitVLA configuration field: {key}")
@@ -258,6 +270,8 @@ def _install_future_frame_patch() -> None:
 def _install_rlds_split_patch() -> None:
     """Apply the configured DROID train/holdout slice before statistics or decoding."""
     import dlimp as dl
+    import tensorflow as tf
+    from prismatic.vla.constants import NUM_ACTIONS_CHUNK
     from prismatic.vla.datasets.rlds import dataset as rlds_dataset
 
     original = dl.DLataset.from_rlds
@@ -265,7 +279,7 @@ def _install_rlds_split_patch() -> None:
     def from_rlds(builder, split="train", shuffle=True, num_parallel_reads=-1):
         assert _RUNTIME is not None
         builder_name = str(getattr(builder, "name", "")).lower()
-        is_droid = "droid" in builder_name or builder_name == "r2d2_faceblur"
+        is_droid = _is_droid_dataset_name(builder_name)
         if _RUNTIME.rlds_split is not None and is_droid and split in {"all", "train"}:
             split = _RUNTIME.rlds_split
         return original(
@@ -276,6 +290,21 @@ def _install_rlds_split_patch() -> None:
         )
 
     dl.DLataset.from_rlds = staticmethod(from_rlds)
+
+    original_make_dataset = rlds_dataset.make_dataset_from_rlds
+
+    def make_dataset_from_rlds(*args, **kwargs):
+        dataset, statistics = original_make_dataset(*args, **kwargs)
+        name = str(kwargs.get("name", args[0] if args else ""))
+        if _is_droid_dataset_name(name):
+            minimum_length = _minimum_droid_trajectory_length(NUM_ACTIONS_CHUNK)
+            dataset = dataset.filter(
+                lambda trajectory: tf.shape(trajectory["action"])[0]
+                >= minimum_length
+            )
+        return dataset, statistics
+
+    rlds_dataset.make_dataset_from_rlds = make_dataset_from_rlds
 
     original_statistics = rlds_dataset.get_dataset_statistics
 

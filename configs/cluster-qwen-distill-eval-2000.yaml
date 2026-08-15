@@ -1,0 +1,9 @@
+run_id: cluster-qwen-distill-seed0-step2000
+seed: 0
+source_checkpoint: lerobot/VLA-JEPA-LIBERO
+checkpoint: outputs/cluster-qwen-distill-seed0/checkpoints/002000/pretrained_model
+output_dir: outputs/cluster-qwen-distill-seed0/screen-2000
+episodes: 10
+task_count: 10
+quantization_scope: qwen
+eval_batch_size: 1

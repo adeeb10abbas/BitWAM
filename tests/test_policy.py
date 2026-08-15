@@ -15,7 +15,7 @@ from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
 from torch import Tensor, nn
 
 from lerobot_policy_bitwam import BitWAMConfig
-from lerobot_policy_bitwam.modeling_bitwam import BitWAMPolicy
+from lerobot_policy_bitwam.modeling_bitwam import BitWAMPolicy, _representation_alignment_loss
 
 
 class _LanguageLayer(nn.Module):
@@ -130,6 +130,23 @@ def test_config_copies_upstream_behavior() -> None:
     assert config.quantization_scope == "none"
     assert config.inference_backend == "native"
     assert config.world_loss_weight == config.world_model_loss_weight
+    assert config.representation_distillation_weight == 0.0
+
+
+def test_representation_distillation_requires_quantization() -> None:
+    with pytest.raises(ValueError, match="requires an enabled quantization scope"):
+        BitWAMConfig.from_vla_jepa(
+            _vla_config(),
+            source_checkpoint="test",
+            representation_distillation_weight=0.1,
+        )
+
+
+def test_representation_alignment_separates_direction_and_scale() -> None:
+    teacher = torch.tensor([[[1.0, -1.0]]])
+    assert _representation_alignment_loss(teacher, teacher).item() == pytest.approx(0.0)
+    assert _representation_alignment_loss(-teacher, teacher).item() > 3.9
+    assert 0 < _representation_alignment_loss(teacher * 2, teacher).item() < 0.1
 
 
 def test_quantization_disabled_matches_upstream_actions(patch_qwen: None) -> None:
@@ -155,6 +172,26 @@ def test_cpu_forward_backward_delegates_to_upstream(patch_qwen: None) -> None:
     assert torch.isfinite(loss)
     assert set(logs) == {"action_loss", "wm_loss", "loss"}
     assert any(parameter.grad is not None for parameter in policy.parameters() if parameter.requires_grad)
+
+
+def test_distillation_teacher_is_frozen_and_not_checkpointed(patch_qwen: None) -> None:
+    config = BitWAMConfig.from_vla_jepa(
+        _vla_config(),
+        source_checkpoint="test",
+        quantization_scope="qwen",
+        representation_distillation_weight=0.1,
+    )
+    policy = BitWAMPolicy(config)
+    loss, logs = policy(_batch())
+    loss.backward()
+
+    assert torch.isfinite(loss)
+    assert set(logs) == {"action_loss", "wm_loss", "representation_loss", "loss"}
+    assert logs["representation_loss"] == pytest.approx(0.0)
+    assert all("_representation_teacher_qwen" not in key for key in policy.state_dict())
+    assert all(
+        not parameter.requires_grad for parameter in policy._representation_teacher_qwen.parameters()
+    )
 
 
 def test_native_source_checkpoint_loads_before_wrapping(

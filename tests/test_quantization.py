@@ -115,6 +115,39 @@ def test_qwen_dit_keeps_encoders_and_final_output_in_bf16() -> None:
     assert report.bf16_parameter_count + report.ternary_parameter_count == report.total_parameter_count
 
 
+def test_attention_only_scope_converts_qwen_attention_and_nothing_else() -> None:
+    tree = _Tree()
+    report = convert_for_qat(tree, "qwen_attention")
+    qwen_block = tree.qwen.model.model.language_model.layers[0]
+    assert isinstance(qwen_block.self_attn.q_proj, TernaryLinear)
+    assert isinstance(qwen_block.mlp.gate_proj, nn.Linear)
+    assert isinstance(tree.action_model.model.transformer_blocks[0].attn1.q_proj, nn.Linear)
+    assert report.ternary_parameter_count == report.eligible_parameter_count
+
+
+def test_mlp_only_scope_converts_qwen_mlp_and_nothing_else() -> None:
+    tree = _Tree()
+    report = convert_for_qat(tree, "qwen_mlp")
+    qwen_block = tree.qwen.model.model.language_model.layers[0]
+    assert isinstance(qwen_block.self_attn.q_proj, nn.Linear)
+    assert isinstance(qwen_block.mlp.gate_proj, TernaryLinear)
+    assert isinstance(tree.action_model.model.transformer_blocks[0].ff.gate_proj, nn.Linear)
+    assert report.ternary_parameter_count == report.eligible_parameter_count
+
+
+def test_middle_half_scope_keeps_outer_qwen_quarters_in_bf16() -> None:
+    tree = _Tree(blocks=8)
+    report = convert_for_qat(tree, "qwen_middle_half")
+    qwen_blocks = tree.qwen.model.model.language_model.layers
+    for index in (0, 1, 6, 7):
+        assert isinstance(qwen_blocks[index].self_attn.q_proj, nn.Linear)
+        assert isinstance(qwen_blocks[index].mlp.gate_proj, nn.Linear)
+    for index in (2, 3, 4, 5):
+        assert isinstance(qwen_blocks[index].self_attn.q_proj, TernaryLinear)
+        assert isinstance(qwen_blocks[index].mlp.gate_proj, TernaryLinear)
+    assert report.ternary_parameter_count == report.eligible_parameter_count
+
+
 def test_ternary_layer_state_dict_round_trip() -> None:
     source = TernaryLinear.from_linear(nn.Linear(4, 3))
     restored = TernaryLinear(4, 3)

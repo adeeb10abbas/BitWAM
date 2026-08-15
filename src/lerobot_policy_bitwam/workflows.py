@@ -56,7 +56,7 @@ def _train_launcher(num_processes: int) -> list[str]:
 
 
 def _resume_config(output_dir: Path) -> Path | None:
-    candidate = output_dir / "checkpoints" / "last" / "pretrained_model" / "train_config.json"
+    candidate = _latest_checkpoint(output_dir) / "train_config.json"
     state_path, _ = _metadata_paths(output_dir, "train")
     if not candidate.is_file():
         return None
@@ -67,6 +67,33 @@ def _resume_config(output_dir: Path) -> Path | None:
     return candidate
 
 
+def _latest_checkpoint(output_dir: Path) -> Path:
+    """Return the most recent saved policy, including LeRobot's numeric-only layout."""
+    checkpoints = output_dir / "checkpoints"
+    candidates = [
+        path
+        for path in checkpoints.glob("*")
+        if path.name.isdigit() and (path / "pretrained_model").is_dir()
+    ]
+    if candidates:
+        return max(candidates, key=lambda path: int(path.name)) / "pretrained_model"
+    return checkpoints / "last" / "pretrained_model"
+
+
+def _is_bf16_materialization(config: dict[str, Any]) -> bool:
+    return (
+        config.get("quantization_scope", "none") == "none"
+        and float(config.get("learning_rate", 1e-4)) == 0.0
+        and int(config.get("steps", 0)) == 1
+    )
+
+
+def _materialization_checkpoint(config: dict[str, Any]) -> Path:
+    if checkpoint := config.get("checkpoint"):
+        return Path(checkpoint)
+    return Path(_required(config, "output_dir")) / "checkpoints" / "000001" / "pretrained_model"
+
+
 def build_train_command(config: dict[str, Any]) -> tuple[str, ...]:
     """Translate a BitWAM experiment config to the pinned LeRobot trainer."""
     source = _required(config, "source_checkpoint")
@@ -74,6 +101,20 @@ def build_train_command(config: dict[str, Any]) -> tuple[str, ...]:
     scope = config.get("quantization_scope", "none")
     world_weight = float(config.get("world_loss_weight", 0.1))
     num_processes = int(config.get("num_processes", 1))
+    if _is_bf16_materialization(config):
+        return tuple(
+            option
+            for option in (
+                sys.executable,
+                "-m",
+                "lerobot_policy_bitwam.materialize",
+                _option("source-checkpoint", source),
+                _option("output-checkpoint", _materialization_checkpoint(config)),
+                _option("source-revision", config.get("source_revision")),
+                _option("world-loss-weight", world_weight),
+            )
+            if not option.endswith("=None")
+        )
     command = _train_launcher(num_processes)
     if resume_config := _resume_config(output_dir):
         command.extend(
@@ -96,6 +137,10 @@ def build_train_command(config: dict[str, Any]) -> tuple[str, ...]:
             _option("policy.world_model_loss_weight", world_weight),
             _option("policy.quantization_scope", scope),
             _option("policy.qat_recovery", config.get("qat_recovery", "none")),
+            _option(
+                "policy.representation_distillation_weight",
+                config.get("representation_distillation_weight", 0.0),
+            ),
             _option("policy.inference_backend", "native"),
             _option("policy.optimizer_lr", config.get("learning_rate", 1e-4)),
             _option("policy.device", "cuda"),
@@ -138,7 +183,7 @@ def _evaluation_checkpoint(config: dict[str, Any]) -> str:
         return str(checkpoint)
     if config.get("quantization_scope", "none") == "none":
         return str(_required(config, "source_checkpoint"))
-    return str(Path(_required(config, "output_dir")) / "checkpoints" / "last" / "pretrained_model")
+    return str(_latest_checkpoint(Path(_required(config, "output_dir"))))
 
 
 def build_evaluate_command(config: dict[str, Any]) -> tuple[str, ...]:
@@ -148,7 +193,7 @@ def build_evaluate_command(config: dict[str, Any]) -> tuple[str, ...]:
     if episodes % task_count:
         raise ValueError("episodes must divide evenly across LIBERO-10 tasks")
     episodes_per_task = episodes // task_count
-    output_dir = Path(_required(config, "output_dir")) / "evaluation"
+    output_dir = Path(config.get("_evaluation_output_dir", _required(config, "output_dir"))) / "evaluation"
     return (
         sys.executable,
         "-m",
@@ -251,6 +296,13 @@ def run_command(command: str, config_path: Path) -> int:
     output_dir = Path(_required(config, "output_dir"))
     if command == "train":
         return _run_external(build_train_command(config), output_dir, "train")
+    if command == "screen":
+        screen_config = config | {
+            "episodes": int(config.get("screen_episodes", 10)),
+            "_evaluation_output_dir": str(output_dir / "screen-1000"),
+        }
+        screen_output_dir = Path(screen_config["_evaluation_output_dir"])
+        return _run_external(build_evaluate_command(screen_config), screen_output_dir, "screen")
     if command == "evaluate":
         return _run_external(build_evaluate_command(config), output_dir, "evaluate")
     raise NotImplementedError(f"The {command!r} workflow is introduced by a later execution phase.")

@@ -10,7 +10,14 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-QuantizationScope = Literal["none", "qwen", "qwen_dit"]
+QuantizationScope = Literal[
+    "none",
+    "qwen",
+    "qwen_dit",
+    "qwen_attention",
+    "qwen_mlp",
+    "qwen_middle_half",
+]
 QATRecovery = Literal["none", "qwen_edges", "dit_tail4"]
 
 
@@ -117,13 +124,29 @@ class QuantizationReport:
 
 def _eligible_kind(module_name: str) -> str | None:
     qwen_layer = ".qwen.model.model.language_model.layers." in f".{module_name}."
-    if qwen_layer and (".self_attn." in f".{module_name}." or ".mlp." in f".{module_name}."):
-        return "qwen"
+    if qwen_layer and ".self_attn." in f".{module_name}.":
+        return "qwen_attention"
+    if qwen_layer and ".mlp." in f".{module_name}.":
+        return "qwen_mlp"
 
     dit_block = ".action_model.model.transformer_blocks." in f".{module_name}."
     if dit_block and (".attn1." in f".{module_name}." or ".ff." in f".{module_name}."):
         return "dit"
     return None
+
+
+def _qwen_middle_half(candidates: list[tuple[str, nn.Linear]]) -> list[tuple[str, nn.Linear]]:
+    """Select attention and MLP linears from the contiguous middle half of Qwen."""
+    indexed = [(name, module, int(match.group(1))) for name, module in candidates if (
+        match := re.search(r"\.language_model\.layers\.(\d+)\.", name)
+    )]
+    if not indexed:
+        return []
+    indices = sorted({index for _, _, index in indexed})
+    lower_quarter = len(indices) // 4
+    start = indices[lower_quarter]
+    stop = indices[-lower_quarter] if lower_quarter else indices[-1] + 1
+    return [(name, module) for name, module, index in indexed if start <= index < stop]
 
 
 def _replace_module(root: nn.Module, name: str, replacement: nn.Module) -> None:
@@ -156,7 +179,14 @@ def convert_for_qat(
     recovery: QATRecovery = "none",
 ) -> QuantizationReport:
     """Deterministically replace eligible linears for the requested QAT scope."""
-    if scope not in {"none", "qwen", "qwen_dit"}:
+    if scope not in {
+        "none",
+        "qwen",
+        "qwen_dit",
+        "qwen_attention",
+        "qwen_mlp",
+        "qwen_middle_half",
+    }:
         raise ValueError(f"Unknown quantization scope: {scope}")
     if recovery not in {"none", "qwen_edges", "dit_tail4"}:
         raise ValueError(f"Unknown QAT recovery: {recovery}")
@@ -166,11 +196,21 @@ def convert_for_qat(
         raise ValueError("dit_tail4 recovery requires qwen_dit scope.")
 
     total = sum(parameter.numel() for parameter in policy.parameters())
-    selected_kinds = {"qwen"} if scope == "qwen" else {"qwen", "dit"} if scope == "qwen_dit" else set()
+    selected_kinds = {
+        "none": set(),
+        "qwen": {"qwen_attention", "qwen_mlp"},
+        "qwen_dit": {"qwen_attention", "qwen_mlp", "dit"},
+        "qwen_attention": {"qwen_attention"},
+        "qwen_mlp": {"qwen_mlp"},
+        "qwen_middle_half": {"qwen_attention", "qwen_mlp"},
+    }[scope]
     candidates: list[tuple[str, nn.Linear]] = []
     for name, module in sorted(policy.named_modules(), key=lambda item: item[0]):
         if isinstance(module, nn.Linear) and _eligible_kind(name) in selected_kinds:
             candidates.append((name, module))
+
+    if scope == "qwen_middle_half":
+        candidates = _qwen_middle_half(candidates)
 
     excluded = _recovery_exclusions(candidates, recovery)
     selected = [(name, module) for name, module in candidates if name not in excluded]

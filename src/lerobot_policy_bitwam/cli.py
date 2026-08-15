@@ -6,7 +6,7 @@ import argparse
 from collections.abc import Sequence
 from pathlib import Path
 
-COMMANDS = ("train", "evaluate", "export", "benchmark", "summarize")
+COMMANDS = ("train", "screen", "evaluate", "export", "benchmark", "summarize")
 
 
 def build_parser() -> argparse.ArgumentParser:

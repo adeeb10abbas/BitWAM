@@ -8,7 +8,14 @@ from typing import Any, Literal
 from lerobot.configs.policies import PreTrainedConfig
 from lerobot.policies.vla_jepa.configuration_vla_jepa import VLAJEPAConfig
 
-QuantizationScope = Literal["none", "qwen", "qwen_dit"]
+QuantizationScope = Literal[
+    "none",
+    "qwen",
+    "qwen_dit",
+    "qwen_attention",
+    "qwen_mlp",
+    "qwen_middle_half",
+]
 InferenceBackend = Literal["native", "reference", "triton"]
 QATRecovery = Literal["none", "qwen_edges", "dit_tail4"]
 
@@ -24,13 +31,21 @@ class BitWAMConfig(VLAJEPAConfig):
     quantization_scope: QuantizationScope = "none"
     inference_backend: InferenceBackend = "native"
     qat_recovery: QATRecovery = "none"
+    representation_distillation_weight: float = 0.0
 
     def __post_init__(self) -> None:
         if self.world_loss_weight is not None:
             self.world_model_loss_weight = self.world_loss_weight
         super().__post_init__()
         self.world_loss_weight = self.world_model_loss_weight
-        if self.quantization_scope not in {"none", "qwen", "qwen_dit"}:
+        if self.quantization_scope not in {
+            "none",
+            "qwen",
+            "qwen_dit",
+            "qwen_attention",
+            "qwen_mlp",
+            "qwen_middle_half",
+        }:
             raise ValueError(f"Unknown quantization scope: {self.quantization_scope}")
         if self.inference_backend not in {"native", "reference", "triton"}:
             raise ValueError(f"Unknown inference backend: {self.inference_backend}")
@@ -42,6 +57,10 @@ class BitWAMConfig(VLAJEPAConfig):
             raise ValueError("qwen_edges recovery requires quantization_scope='qwen'.")
         if self.qat_recovery == "dit_tail4" and self.quantization_scope != "qwen_dit":
             raise ValueError("dit_tail4 recovery requires quantization_scope='qwen_dit'.")
+        if self.representation_distillation_weight < 0:
+            raise ValueError("representation_distillation_weight must be non-negative.")
+        if self.representation_distillation_weight and self.quantization_scope == "none":
+            raise ValueError("Representation distillation requires an enabled quantization scope.")
 
     @classmethod
     def from_vla_jepa(

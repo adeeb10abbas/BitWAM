@@ -1,0 +1,6 @@
+# Non-interactive LIBERO setup for the shared B200 workspace.
+benchmark_root: /data/users/ali/BitWAM/.venv/lib/python3.12/site-packages/libero/libero
+bddl_files: /data/users/ali/BitWAM/.venv/lib/python3.12/site-packages/libero/libero/bddl_files
+init_states: /data/users/ali/BitWAM/.venv/lib/python3.12/site-packages/libero/libero/init_files
+datasets: /data/users/ali/.cache/libero/datasets
+assets: /data/users/ali/.cache/libero/assets

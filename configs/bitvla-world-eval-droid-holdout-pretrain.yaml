@@ -6,7 +6,7 @@ stage: droid_holdout_pretrain_normal_actions
 seed: 0
 num_processes: 1
 rlds_split: train[99%:]
-dataset_statistics_path: /data/users/ali/bitvla_runs/bitwam-droid-pretrain/dataset_statistics.json
+dataset_statistics_path: /data/users/ali/bitvla_data/droid_rlds/train99_dataset_statistics.json
 
 freeze_policy: true
 world_loss_weight: 1.0

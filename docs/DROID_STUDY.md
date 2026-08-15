@@ -62,8 +62,8 @@ within hardware and never compare raw A100 time against B200 time.
 2. DROID action-only mid/post-training with the same optimizer steps and images.
 3. DROID world pretraining without Stage M, isolating the value of joint
    intermediate adaptation.
-4. Zero-action and shuffled-action world controls, evaluated on the identical
-   held-out episodes.
+4. Random-initialized, zero-action, and shuffled-action world controls,
+   evaluated on the identical held-out episodes and training-split statistics.
 5. BF16 versus ternary world head with identical transferred backbone.
 6. Cosmos3 Edge-Policy-DROID (4B) and Nano-Policy-DROID (16B) on a shared DROID
    episode manifest. Edge is the primary external size comparison.

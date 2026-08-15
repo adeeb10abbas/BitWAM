@@ -1,8 +1,41 @@
 # Execution status
 
-Status recorded on 2026-08-14 from branch `ali/claude`.
+Status recorded on 2026-08-15 from branch `ali/claude`.
 
-## Verified locally
+## Active native BitVLA track
+
+The paper track now uses the released native ternary BitVLA controller at upstream
+revision `8afac0260b3748b14657a69ec58e3d9f0d6da3a7`. This replaces the unsuccessful
+post-hoc Qwen ternarization route as the primary substrate; the older experiments
+remain useful negative evidence.
+
+Verified closed-loop LIBERO-10 smoke results, one ordered rollout per task:
+
+- Released native BitVLA at step 100,000: 10/10.
+- Matched action-only continued training at step 101,000: 10/10.
+- Matched action-only continued training at step 102,000: 10/10.
+
+The world-model training path has also passed these gates:
+
+- Frozen-controller BF16 predictor pretraining increased future-latent cosine above
+  0.92 while leaving saved action and proprioception tensors bit-identical to the
+  released controller.
+- A ternary predictor loaded the BF16 state strictly, used only effective matrix
+  levels `{-1, 0, +1}`, completed CUDA backward, and recovered approximately 0.94
+  future-latent cosine during calibration.
+- The pre-contrastive correct-versus-shuffled action gap remained only about
+  `5e-4`, exposing a static-scene shortcut. The joint objective now includes a 0.05
+  shuffled-action margin.
+
+Two 2,000-update joint runs are active on the four-B200 Kubernetes pod: the primary
+ternary predictor on GPUs 1/3 and the BF16 predictor ablation on GPUs 0/2. Each has
+an automatic 10-task evaluator waiting on its final saved checkpoint. The cgroup OOM
+kill counter has not increased during these jobs.
+
+The current local check result is `60 passed, 1 skipped`; the skip is CUDA-only on
+the macOS host. The Python linter passes.
+
+## Historical local VLA-JEPA track
 
 - Phase 1 acceptance: clean Python 3.12 package, exact `uv.lock`, import,
   `bitwam --help`, and CPU tests.
@@ -24,7 +57,7 @@ Status recorded on 2026-08-14 from branch `ali/claude`.
   completed and the process exited zero. The reported peak allocation was
   12.72 GiB per rank.
 
-The current required check result is `29 passed, 1 warning`. The warning is the
+The check result at that point was `29 passed, 1 warning`. The warning is the
 expected CPU-autocast warning in a CPU-only delegation test; both CUDA acceptance
 tests pass.
 
@@ -50,7 +83,7 @@ microbatches as steps, so this layout preserves all 2,000 optimizer updates. It
 saves at steps 1,000 and 2,000; a failed job automatically resumes from
 `checkpoints/last`.
 
-## Active Phase 4 gate
+## Historical Phase 4 gate
 
 The Qwen pilot must score at least 45 successes from 50 episodes to reach 90% of
 the measured BF16 result. Only then may the `qwen_dit` pilot run. The original
@@ -75,12 +108,13 @@ evaluation schedule, stop rules, and plain-language report format, see
 
 ## Remaining work
 
-- Complete and evaluate the 2,000-step Qwen pilot.
-- Run the gated Qwen+DiT pilot, using a recovery only if its primary run misses.
-- Implement and validate genuinely packed reference and Triton inference.
-- Run and evaluate the gated 12-run final matrix.
-- Package final manifests, aggregate metrics, size/VRAM/latency results, and the
-  compact results table.
+- Finish and evaluate the active BF16- and ternary-predictor joint checkpoints.
+- Promote only checkpoints that retain at least 95% of released control success.
+- Run 50 rollouts per task for three seeds with paired initial states.
+- Measure packed ternary storage, peak VRAM, training cost, and deployed inference
+  latency.
+- Replace pending paper cells with archived multi-seed metrics and confidence
+  intervals.
 
 No quantized task-success, compression, or latency claim is authorized until
 the corresponding closed-loop or packed-inference artifact exists.

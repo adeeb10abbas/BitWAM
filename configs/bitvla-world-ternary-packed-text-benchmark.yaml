@@ -10,5 +10,6 @@ benchmark_target: policy
 packed_runtime: true
 packed_scope: text
 packed_runtime_backend: compiled_unpack
-benchmark_warmup_iterations: 5
-benchmark_iterations: 20
+validate_packed_output: true
+benchmark_warmup_iterations: 20
+benchmark_iterations: 100

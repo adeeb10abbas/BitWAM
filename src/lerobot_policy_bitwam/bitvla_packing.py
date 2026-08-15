@@ -50,6 +50,26 @@ def dequantize_packed_weight(
     return ((codes.float() - 1) * scale).to(torch.bfloat16).view(rows, columns)
 
 
+def unpack_packed_weight_int8_transposed(
+    packed: torch.Tensor,
+    rows: int,
+    columns: int,
+) -> torch.Tensor:
+    """Decode a packed row-major matrix directly into contiguous K-by-N INT8 layout."""
+    positions = torch.arange(rows * columns, device=packed.device)
+    packed_values = packed[positions // 4]
+    shifts = (positions % 4) * 2
+    codes = ((packed_values >> shifts) & 0x03).to(torch.int8) - 1
+    return codes.view(rows, columns).T.contiguous()
+
+
+def quantize_activation_int8(inputs: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return per-token INT8 activations and the inverse quantization scale."""
+    inverse_scale = inputs.float().abs().amax(dim=-1, keepdim=True).clamp(min=1e-5) / 127
+    quantized = (inputs.float() / inverse_scale).round().clamp(-128, 127).to(torch.int8)
+    return quantized, inverse_scale
+
+
 def _packed_forward(
     layer: nn.Module,
     inputs: torch.Tensor,
@@ -61,6 +81,24 @@ def _packed_forward(
     rows, columns = layer.orig_shape
     weight = compiled_dequantize(layer.q_weight, layer.w_step, rows, columns)
     return F.linear(inputs, weight, layer.bias)
+
+
+def _torch_int8_forward(
+    layer: nn.Module,
+    inputs: torch.Tensor,
+    compiled_unpack: Any,
+    compiled_activation_quant: Any,
+) -> torch.Tensor:
+    input_shape = inputs.shape
+    rows, columns = layer.orig_shape
+    quantized_inputs, inverse_scale = compiled_activation_quant(inputs.reshape(-1, columns))
+    weight_transposed = compiled_unpack(layer.q_weight, rows, columns)
+    accumulated = torch._int_mm(quantized_inputs, weight_transposed)
+    output = accumulated.float() * inverse_scale * layer.w_step.float()
+    output = output.to(inputs.dtype).view(*input_shape[:-1], rows)
+    if layer.bias is not None:
+        output = output + layer.bias
+    return output
 
 
 def enable_compiled_bitlinear_unpack(module: nn.Module) -> int:
@@ -84,6 +122,41 @@ def enable_compiled_bitlinear_unpack(module: nn.Module) -> int:
         optimized_layers += 1
     if optimized_layers == 0:
         raise RuntimeError("No packed BitLinear layers were available for compiled unpacking")
+    return optimized_layers
+
+
+def enable_torch_int8_bitlinear_runtime(module: nn.Module) -> int:
+    """Use packed INT2 weights with native CUDA INT8 tensor-core matrix multiplication."""
+    if not hasattr(torch, "_int_mm"):
+        raise RuntimeError("The installed PyTorch build does not provide CUDA INT8 matrix multiply")
+    compiled_unpack = torch.compile(
+        unpack_packed_weight_int8_transposed,
+        fullgraph=True,
+        dynamic=False,
+    )
+    compiled_activation_quant = torch.compile(
+        quantize_activation_int8,
+        fullgraph=True,
+        dynamic=False,
+    )
+    optimized_layers = 0
+    for candidate in module.modules():
+        if candidate.__class__.__name__ != "BitLinear" or not bool(
+            getattr(candidate, "enable_qlora", False)
+        ):
+            continue
+        if not isinstance(getattr(candidate, "q_weight", None), torch.Tensor):
+            continue
+        candidate.w_step = candidate.w_step.to(candidate.q_weight.device)
+        candidate.forward = MethodType(
+            lambda layer, inputs, unpack=compiled_unpack, activation=compiled_activation_quant: (
+                _torch_int8_forward(layer, inputs, unpack, activation)
+            ),
+            candidate,
+        )
+        optimized_layers += 1
+    if optimized_layers == 0:
+        raise RuntimeError("No packed BitLinear layers were available for the INT8 runtime")
     return optimized_layers
 
 

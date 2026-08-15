@@ -28,6 +28,7 @@ _RUNTIME_FIELDS = {
     "action_checkpoint",
     "architecture",
     "config_revision",
+    "dataset_statistics_path",
     "freeze_policy",
     "metrics_path",
     "num_processes",
@@ -39,6 +40,7 @@ _RUNTIME_FIELDS = {
     "upstream_revision",
     "upstream_root",
     "world_action_embedding_dim",
+    "world_action_mode",
     "world_checkpoint",
     "world_contrastive_margin",
     "world_contrastive_weight",
@@ -62,6 +64,7 @@ class BitVLARuntimeConfig:
     world_hidden_dim: int
     world_action_embedding_dim: int
     world_head_precision: str
+    world_action_mode: str
     world_contrastive_weight: float
     world_contrastive_margin: float
     save_backbone: bool
@@ -69,6 +72,7 @@ class BitVLARuntimeConfig:
     action_checkpoint: Path | None
     proprio_checkpoint: Path | None
     rlds_split: str | None
+    dataset_statistics_path: Path | None
     optimizer_checkpoint: Path | None
     metrics_path: Path | None
     seed: int
@@ -120,11 +124,15 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     rlds_split = config.get("rlds_split")
     if rlds_split is not None and not re.fullmatch(r"train(?:\[\d*%?:\d*%?\])?", str(rlds_split)):
         raise ValueError("rlds_split must be a deterministic slice of the train split")
+    dataset_statistics_path = config.get("dataset_statistics_path")
     optimizer_checkpoint = config.get("optimizer_checkpoint")
     metrics_path = config.get("metrics_path")
     world_head_precision = str(config.get("world_head_precision", "bf16"))
     if world_head_precision not in {"bf16", "ternary"}:
         raise ValueError("world_head_precision must be one of: bf16, ternary")
+    world_action_mode = str(config.get("world_action_mode", "normal"))
+    if world_action_mode not in {"normal", "zero", "shuffled"}:
+        raise ValueError("world_action_mode must be one of: normal, zero, shuffled")
     contrastive_weight = float(config.get("world_contrastive_weight", 0.0))
     contrastive_margin = float(config.get("world_contrastive_margin", 0.05))
     if contrastive_weight < 0 or contrastive_margin < 0:
@@ -139,6 +147,7 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         world_hidden_dim=int(config.get("world_hidden_dim", 2048)),
         world_action_embedding_dim=int(config.get("world_action_embedding_dim", 256)),
         world_head_precision=world_head_precision,
+        world_action_mode=world_action_mode,
         world_contrastive_weight=contrastive_weight,
         world_contrastive_margin=contrastive_margin,
         save_backbone=bool(config.get("save_backbone", True)),
@@ -146,6 +155,9 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         action_checkpoint=Path(action_checkpoint) if action_checkpoint else None,
         proprio_checkpoint=Path(proprio_checkpoint) if proprio_checkpoint else None,
         rlds_split=str(rlds_split) if rlds_split else None,
+        dataset_statistics_path=(
+            Path(dataset_statistics_path) if dataset_statistics_path else None
+        ),
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
         metrics_path=Path(metrics_path) if metrics_path else None,
         seed=int(config.get("seed", 0)),
@@ -251,6 +263,28 @@ def _install_rlds_split_patch() -> None:
         )
 
     dl.DLataset.from_rlds = staticmethod(from_rlds)
+
+
+def _install_dataset_statistics_patch() -> None:
+    """Reuse training-split normalization when evaluating the DROID holdout."""
+    from prismatic.vla.datasets import datasets
+
+    assert _RUNTIME is not None
+    if _RUNTIME.dataset_statistics_path is None:
+        return
+    with _RUNTIME.dataset_statistics_path.open(encoding="utf-8") as stream:
+        all_statistics = json.load(stream)
+    original = datasets.get_oxe_dataset_kwargs_and_weights
+
+    def get_oxe_dataset_kwargs_and_weights(*args, **kwargs):
+        dataset_kwargs, weights = original(*args, **kwargs)
+        for item in dataset_kwargs:
+            name = item.get("name")
+            if name in all_statistics:
+                item["dataset_statistics"] = all_statistics[name]
+        return dataset_kwargs, weights
+
+    datasets.get_oxe_dataset_kwargs_and_weights = get_oxe_dataset_kwargs_and_weights
 
 
 def _future_transform_class(base_class):
@@ -453,10 +487,18 @@ def _run_forward_pass(
         )
         future_latent = future_features.mean(dim=1)
 
-    shuffled_actions = actions.roll(1, dims=0) if actions.shape[0] > 1 else None
+    if _RUNTIME.world_action_mode == "normal":
+        conditioned_actions = actions
+        shuffled_actions = actions.roll(1, dims=0) if actions.shape[0] > 1 else None
+    elif _RUNTIME.world_action_mode == "zero":
+        conditioned_actions = torch.zeros_like(actions)
+        shuffled_actions = conditioned_actions if actions.shape[0] > 1 else None
+    else:
+        conditioned_actions = actions.roll(1, dims=0)
+        shuffled_actions = actions if actions.shape[0] > 1 else None
     world_output = _WORLD_HEAD(
         action_hidden_states,
-        actions,
+        conditioned_actions,
         future_latent,
         shuffled_actions=shuffled_actions,
         contrastive_margin=_RUNTIME.world_contrastive_margin,
@@ -579,6 +621,7 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "world_loss_weight": _RUNTIME.world_loss_weight,
                 "world_learning_rate": _RUNTIME.world_learning_rate,
                 "world_head_precision": _RUNTIME.world_head_precision,
+                "world_action_mode": _RUNTIME.world_action_mode,
                 "world_contrastive_weight": _RUNTIME.world_contrastive_weight,
                 "world_contrastive_margin": _RUNTIME.world_contrastive_margin,
                 "freeze_policy": _RUNTIME.freeze_policy,
@@ -590,6 +633,11 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "gradient_accumulation_steps": cfg.grad_accumulation_steps,
                 "use_proprio": cfg.use_proprio,
                 "rlds_split": _RUNTIME.rlds_split,
+                "dataset_statistics_path": (
+                    str(_RUNTIME.dataset_statistics_path)
+                    if _RUNTIME.dataset_statistics_path
+                    else None
+                ),
                 "action_checkpoint": (
                     str(_RUNTIME.action_checkpoint) if _RUNTIME.action_checkpoint else None
                 ),
@@ -611,6 +659,7 @@ def install_bitwam_patches(upstream: ModuleType) -> None:
     """Install the narrow data, loss, optimizer, and checkpoint integration."""
     _install_future_frame_patch()
     _install_rlds_split_patch()
+    _install_dataset_statistics_patch()
     upstream.BitVLA_RLDSBatchTransform = _future_transform_class(
         upstream.BitVLA_RLDSBatchTransform
     )

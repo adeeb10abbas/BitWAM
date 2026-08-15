@@ -1,0 +1,20 @@
+{
+  "run_id": "native-bitvla-world-smoke",
+  "architecture": "native-bitvla-wam",
+  "bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7",
+  "control_checkpoint": {
+    "repository": "hongyuw/ft-bitvla-bitsiglipL-224px-libero_long-bf16",
+    "revision": "d93ee990a5ecb87078118a0d4e9b7d051d4ef568",
+    "component_step": 100000
+  },
+  "dataset": {
+    "repository": "openvla/modified_libero_rlds",
+    "name": "libero_10_no_noops"
+  },
+  "config": "configs/bitvla-world-smoke-libero10.yaml",
+  "hardware": "1x NVIDIA B200",
+  "torch": "2.9.1+cu128",
+  "seed": 0,
+  "updates": 2,
+  "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-smoke--100001_chkpt"
+}

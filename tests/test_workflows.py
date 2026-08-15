@@ -71,6 +71,35 @@ def test_training_rejects_zero_processes() -> None:
         build_train_command(_pilot() | {"num_processes": 0})
 
 
+def test_native_bitvla_training_uses_staged_integration_module(tmp_path: Path) -> None:
+    config_path = tmp_path / "bitvla.yaml"
+    config_path.write_text("architecture: bitvla\n", encoding="utf-8")
+    command = build_train_command(
+        {
+            "architecture": "bitvla",
+            "_config_path": str(config_path),
+            "num_processes": 2,
+        }
+    )
+    assert "--nproc-per-node=2" in command
+    assert "lerobot_policy_bitwam.bitvla_train" in command
+    assert command[-2:] == ("--config", str(config_path))
+
+
+def test_single_gpu_bitvla_training_still_initializes_torch_distributed(tmp_path: Path) -> None:
+    config_path = tmp_path / "bitvla.yaml"
+    config_path.write_text("architecture: bitvla\n", encoding="utf-8")
+    command = build_train_command(
+        {
+            "architecture": "bitvla",
+            "_config_path": str(config_path),
+            "num_processes": 1,
+        }
+    )
+    assert command[0].endswith("/torchrun")
+    assert "--nproc-per-node=1" in command
+
+
 def test_failed_training_resumes_from_last_checkpoint(tmp_path: Path) -> None:
     output_dir = tmp_path / "pilot"
     resume_config = output_dir / "checkpoints/last/pretrained_model/train_config.json"

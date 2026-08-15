@@ -1,0 +1,12 @@
+{
+  "action_l1": 0.04126,
+  "world_loss": 1.00382,
+  "world_cosine_similarity": -0.00382,
+  "action_head_exactly_preserved": true,
+  "action_head_max_abs_diff": 0.0,
+  "proprio_projector_exactly_preserved": true,
+  "proprio_projector_max_abs_diff": 0.0,
+  "cuda_forward_backward": true,
+  "optimizer_checkpoint_saved": true,
+  "scheduler_checkpoint_saved": true
+}

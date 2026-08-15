@@ -1,0 +1,18 @@
+# B200/Python 3.10 overlay for BitVLA revision 8afac0260b3748b14657a69ec58e3d9f0d6da3a7.
+# Install the repository's transformers, openvla-oft, and bitvla projects editable.
+torch==2.9.1
+torchvision==0.24.1
+numpy==1.26.4
+tensorflow==2.15.0
+tensorflow-datasets==4.9.3
+tensorflow-metadata==1.15.0
+protobuf==3.20.3
+setuptools==75.8.0
+draccus==0.8.0
+peft==0.11.1
+diffusers==0.30.3
+tokenizers==0.21.4
+timm==0.9.10
+sentencepiece==0.1.99
+wandb==0.16.3
+dlimp @ git+https://github.com/moojink/dlimp_openvla@040105d256bd28866cc6620621a3d5f7b6b91b46

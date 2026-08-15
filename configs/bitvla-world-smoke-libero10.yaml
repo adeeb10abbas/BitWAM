@@ -1,0 +1,42 @@
+architecture: bitvla
+config_revision: c44a3f6
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+stage: world_head_cuda_smoke
+seed: 0
+num_processes: 1
+
+freeze_policy: true
+world_loss_weight: 1.0
+world_learning_rate: 0.0001
+world_hidden_dim: 2048
+world_action_embedding_dim: 256
+save_backbone: false
+metrics_path: /data/users/ali/bitvla_runs/bitwam-world-smoke/metrics.jsonl
+
+output_dir: /data/users/ali/bitvla_runs/bitwam-world-smoke
+run_id: bitvla-world-smoke-libero10-seed0
+
+vla_path: /data/users/ali/bitvla_models/ft-libero-long
+data_root_dir: /data/users/ali/bitvla_data/modified_libero_rlds
+dataset_name: libero_10_no_noops
+run_root_dir: /data/users/ali/bitvla_runs
+run_id_override: bitwam-world-smoke
+resume: true
+resume_step: 100000
+use_l1_regression: true
+use_lora: false
+num_images_in_input: 2
+use_proprio: true
+batch_size: 1
+grad_accumulation_steps: 1
+learning_rate: 0.00001
+lr_vit: 0.0
+warmup_steps: 1
+max_steps: 100001
+save_freq: 1
+save_latest_checkpoint_only: false
+shuffle_buffer_size: 100
+image_aug: false
+wandb_log_freq: 1
+use_wandb: false

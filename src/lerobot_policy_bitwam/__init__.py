@@ -1,6 +1,4 @@
-"""BitWAM LeRobot policy plugin."""
-
-from lerobot_policy_bitwam.configuration_bitwam import BitWAMConfig
+"""BitWAM policy package with lazy framework-specific imports."""
 
 __version__ = "0.1.0"
 
@@ -16,6 +14,10 @@ __all__ = [
 
 def __getattr__(name: str):
     """Keep the model implementation lazy during plugin discovery."""
+    if name == "BitWAMConfig":
+        from lerobot_policy_bitwam.configuration_bitwam import BitWAMConfig
+
+        return BitWAMConfig
     if name == "BitWAMPolicy":
         from lerobot_policy_bitwam.modeling_bitwam import BitWAMPolicy
 

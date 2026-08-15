@@ -55,6 +55,23 @@ def _train_launcher(num_processes: int) -> list[str]:
     ]
 
 
+def _bitvla_train_command(config: dict[str, Any]) -> tuple[str, ...]:
+    config_path = _required(config, "_config_path")
+    num_processes = int(config.get("num_processes", 1))
+    if num_processes < 1:
+        raise ValueError("num_processes must be at least 1")
+    torchrun = Path(sys.executable).with_name("torchrun")
+    return (
+        str(torchrun),
+        "--standalone",
+        f"--nproc-per-node={num_processes}",
+        "--module",
+        "lerobot_policy_bitwam.bitvla_train",
+        "--config",
+        str(config_path),
+    )
+
+
 def _resume_config(output_dir: Path) -> Path | None:
     candidate = _latest_checkpoint(output_dir) / "train_config.json"
     state_path, _ = _metadata_paths(output_dir, "train")
@@ -96,6 +113,8 @@ def _materialization_checkpoint(config: dict[str, Any]) -> Path:
 
 def build_train_command(config: dict[str, Any]) -> tuple[str, ...]:
     """Translate a BitWAM experiment config to the pinned LeRobot trainer."""
+    if config.get("architecture") == "bitvla":
+        return _bitvla_train_command(config)
     source = _required(config, "source_checkpoint")
     output_dir = Path(_required(config, "output_dir"))
     scope = config.get("quantization_scope", "none")

@@ -136,3 +136,23 @@ git switch ali/claude
 Read this file completely before editing. Begin with Phase 1, execute phases sequentially, and push each completed phase to `ali/claude`. Long GPU jobs should be resumable, skip completed outputs, and write a PID and log file so another agent can inspect or resume them.
 
 V-JEPA2 remains BF16 and training-only because it is not part of deployed inference. V1 targets Linux with Ampere-or-newer NVIDIA GPUs; CPU and macOS training are out of scope.
+
+## Native BitVLA recovery branch
+
+The Phase 4 ternarization gate failed: every direct Qwen ternarization and the
+predefined recovery/distillation variants scored 0/10 closed-loop episodes.
+That evidence authorizes the architecture change that the original plan otherwise
+forbids. The recovery branch starts from the native ternary BitVLA checkpoint
+instead of applying post-training ternarization to a BF16 VLA-JEPA checkpoint.
+
+The staged recovery is:
+
+1. Reproduce the released native BitVLA LIBERO-10 control checkpoint.
+2. Freeze the controller and pretrain a BF16 head to predict the future projected
+   visual latent from action-token state and the demonstrated action chunk.
+3. Jointly post-train action and world losses with a lower policy learning rate.
+4. Compare control and WAM checkpoints in the same closed-loop LIBERO harness.
+
+The exact upstream BitVLA revision, released checkpoint revision, data revision,
+stage configs, metrics, and closed-loop results remain subject to the provenance
+and artifact rules above.

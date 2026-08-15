@@ -87,6 +87,28 @@ action measurements are labeled as Cosmos Framework or vLLM-Omni unless an
 action-capable TensorRT engine is actually validated. No framework label is
 inferred from checkpoint format alone.
 
+### Smaller released WAM scope
+
+"Small" is not normalized to the lowest number quoted by a paper. Trainable,
+active, frozen-backbone, and total deployed parameters are retained as different
+quantities. The common DROID comparison is limited to models with a compatible
+released DROID policy; the other rows remain arena-separated context.
+
+| Model | Release scale/interface | Runnable evidence in this study | Comparison status |
+| --- | --- | --- | --- |
+| BitWAM | native ternary BitVLA action path plus 21.05 MiB training-only latent head | DROID/LIBERO staged study | primary |
+| [UVA](https://github.com/ShuangLI59/unified_video_action) | compact joint video/action model; two-stage video then joint training | released LIBERO checkpoint, no common DROID arm | contextual |
+| [Light-WAM](https://arxiv.org/abs/2606.08242) | 0.44B trainable plus frozen 1.3B Wan backbone | release reviewed; local RoboTwin gate only | next lightweight replication |
+| [Efficient-WAM](https://efficientwam.github.io/) | 1B model; low-cost coarse future branch | sealed Efficient-WAM-RT RoboTwin trajectories | contextual, different arena |
+| [Fast-WAM](https://github.com/yuantianyuan01/FastWAM) | action-only test-time mode; total deployed scale not normalized here | sealed RoboTwin trajectories | contextual, different arena |
+| Cosmos3 Edge Policy DROID | 4B policy model card; decoded video/action output | sealed DROID/RoboLab plus pending common manifest | primary external DROID arm |
+| Cosmos3 Nano Policy DROID | 16B policy model card; decoded video/action output | sealed DROID/RoboLab plus pending common manifest | larger reference, not a small arm |
+
+Efficient-WAM's official project reports a 1B model and roughly 100 ms physical
+deployment chunks, while the released Fast-WAM recipe trains on eight GPUs for
+LIBERO and defaults evaluation to eight GPUs. Those source-native figures are
+not substituted for measurements on BitWAM's B200 protocol.
+
 ## Existing deployment reference
 
 Before DROID training, exact text packing of the ternary BitVLA action path

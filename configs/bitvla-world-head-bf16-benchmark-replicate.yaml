@@ -1,0 +1,11 @@
+architecture: bitvla
+output_dir: /data/users/ali/bitvla_benchmarks/replicate/world-head-bf16
+run_id: bitwam-world-head-bf16-replicate
+seed: 0
+benchmark_target: world_head
+world_head_ternary: false
+world_head_latent_dim: 2560
+world_head_hidden_dim: 2048
+benchmark_batch_size: 8
+benchmark_warmup_iterations: 20
+benchmark_iterations: 100

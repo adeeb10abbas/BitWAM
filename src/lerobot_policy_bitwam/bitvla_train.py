@@ -122,6 +122,21 @@ def _minimum_droid_trajectory_length(action_chunk_size: int) -> int:
     return action_chunk_size + 1
 
 
+def _select_droid_statistics(all_statistics: dict[str, Any]) -> dict[str, Any]:
+    """Select one DROID normalization record from a study statistics file."""
+    matches = [
+        statistics
+        for name, statistics in all_statistics.items()
+        if _is_droid_dataset_name(name)
+    ]
+    if len(matches) != 1:
+        raise ValueError(
+            "dataset statistics must contain exactly one DROID record; "
+            f"found {len(matches)}"
+        )
+    return matches[0]
+
+
 def _required(config: dict[str, Any], key: str) -> Any:
     if key not in config:
         raise ValueError(f"Missing required BitVLA configuration field: {key}")
@@ -320,24 +335,26 @@ def _install_rlds_split_patch() -> None:
 
 def _install_dataset_statistics_patch() -> None:
     """Reuse training-split normalization when evaluating the DROID holdout."""
-    from prismatic.vla.datasets import datasets
+    from prismatic.vla.datasets.rlds import dataset as rlds_dataset
 
     assert _RUNTIME is not None
     if _RUNTIME.dataset_statistics_path is None:
         return
     with _RUNTIME.dataset_statistics_path.open(encoding="utf-8") as stream:
         all_statistics = json.load(stream)
-    original = datasets.get_oxe_dataset_kwargs_and_weights
+    droid_statistics = _select_droid_statistics(all_statistics)
 
-    def get_oxe_dataset_kwargs_and_weights(*args, **kwargs):
-        dataset_kwargs, weights = original(*args, **kwargs)
-        for item in dataset_kwargs:
-            name = item.get("name")
-            if name in all_statistics:
-                item["dataset_statistics"] = all_statistics[name]
-        return dataset_kwargs, weights
+    # Do not inject ``dataset_statistics`` into OXE's per-dataset kwargs. Its
+    # interleaver later expands those kwargs next to an explicit argument with
+    # the same name, which fails before the callee can resolve the duplicate.
+    # Supplying the pinned record at the statistics function keeps the upstream
+    # two-pass construction intact: pass one obtains the record and pass two
+    # forwards it explicitly for normalization.
+    def get_dataset_statistics(dataset, hash_dependencies, save_dir=None):
+        del dataset, hash_dependencies, save_dir
+        return droid_statistics
 
-    datasets.get_oxe_dataset_kwargs_and_weights = get_oxe_dataset_kwargs_and_weights
+    rlds_dataset.get_dataset_statistics = get_dataset_statistics
 
 
 def _future_transform_class(base_class):

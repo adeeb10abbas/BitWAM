@@ -5,6 +5,7 @@ import pytest
 from lerobot_policy_bitwam.bitvla_train import (
     _is_droid_dataset_name,
     _minimum_droid_trajectory_length,
+    _select_droid_statistics,
     build_upstream_argv,
     parse_runtime_config,
 )
@@ -91,6 +92,15 @@ def test_droid_future_target_requires_frame_after_action_chunk() -> None:
     assert _minimum_droid_trajectory_length(8) == 9
     with pytest.raises(ValueError, match="positive"):
         _minimum_droid_trajectory_length(0)
+
+
+def test_select_droid_statistics_requires_one_droid_record() -> None:
+    statistics = {"droid": {"num_trajectories": 94_701}}
+    assert _select_droid_statistics(statistics) is statistics["droid"]
+    with pytest.raises(ValueError, match="exactly one"):
+        _select_droid_statistics({"bridge": {}})
+    with pytest.raises(ValueError, match="found 2"):
+        _select_droid_statistics({"droid": {}, "droid_100": {}})
 
 
 def test_runtime_config_rejects_negative_world_loss(tmp_path: Path) -> None:

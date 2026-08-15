@@ -13,7 +13,7 @@ the model interfaces permit it.
 
 | Arm | DROID P | DROID M | LIBERO F | World action | Status |
 | --- | --- | --- | --- | --- | --- |
-| BitWAM staged | 20k frozen-head | 5k joint | 2k joint/ternary | observed | pending |
+| BitWAM staged | 20k frozen-head | 5k joint | 2k joint/ternary | observed | P running on 4× B200 |
 | BitWAM no-M | 20k frozen-head | none | 2k joint/ternary | observed | pending |
 | Visual-only control | 20k frozen-head | none | matched downstream | zero | pending |
 | Shuffled-action control | 20k frozen-head | none | none | within-rank permutation | pending |
@@ -33,6 +33,7 @@ stage definitions are preregistered in `docs/DROID_STUDY.md`.
 | Full DROID 1.0.1 object integrity | 2,050 objects; 1,865,994,705,042 bytes; 2,048 TFRecord shards; 95,658 episodes; per-object size and MD5 | passed |
 | Full train statistics | 94,701 trajectories; 27,358,560 transitions; deterministic `train[:99%]`, cache keyed by split | passed |
 | Full-release gradient | two finite optimizer steps on one B200; config revision `c8644d4` | passed |
+| Full-release Stage-P start | four synchronized B200 ranks; finite metric row at micro-step 10; config revision `821b1bf` | passed |
 
 The full-release manifest is archived as
 `results/droid-study/droid-full-download-manifest.json` with SHA-256
@@ -62,6 +63,21 @@ The DROID-100 run produced finite losses and a checkpoint, but it is an
 initialization smoke and not a quality result. Its archived action L1 was
 0.33301, world loss 0.97842, future cosine 0.02158, and observed-minus-shuffled
 conditioning gap approximately -0.00006.
+
+The first full Stage-P launch exposed valid short DROID episodes for which the
+upstream future-window transform computed a negative range. Revision `821b1bf`
+now filters standardized DROID trajectories shorter than the required nine
+frames before chunking. A clean relaunch crossed that error and was then
+OOM-killed by the original pod's 64-GiB host-memory limit, with CUDA memory well
+below capacity. Both attempts are retained as infrastructure-invalid evidence.
+The primary run was moved without changing its training configuration to a
+4× B200 pod with a 512-GiB cgroup limit. Its first synchronized row at
+micro-step 10 recorded finite action L1 0.344336, world loss 0.984455, future
+cosine 0.015545, a positive conditioning gap of `5.29e-5`, 31.82 examples/s,
+and peak rank-0 CUDA allocation/reservation of 15,112,216,064 and
+22,951,231,488 bytes. At micro-step 730, forward throughput had warmed to
+97.53 examples/s and the cgroup still recorded zero OOM events. These are live
+training diagnostics, not final quality measurements.
 
 ## Metrics that will decide the claim
 

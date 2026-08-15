@@ -1,8 +1,8 @@
 # BitWAM: Predictive Post-Training for Ternary Vision-Language-Action Policies
 
-> Living draft. Bracketed items and `PENDING` cells must be replaced only from
-> archived artifacts. The 10-episode results below are engineering smoke tests,
-> not the final statistical evaluation.
+> Living draft. Results are filled only from archived artifacts. The completed
+> seed-0 evaluation has five rollouts per task; the preregistered multi-seed paper
+> matrix remains pending.
 
 ## Abstract
 
@@ -15,12 +15,14 @@ stage first learns the predictive task, a calibration stage converts the predict
 to absmean ternary matrix weights with per-token INT8 activations, and a final stage
 jointly optimizes action regression and prediction. A shuffled-action margin prevents
 the predictor from satisfying the objective through static scene similarity. The
-predictor is used only during training and adds no deployed policy latency. In an
-initial one-rollout-per-task LIBERO-10 screen, released BitVLA and its matched
-2,000-update action-only control each solve 10/10 tasks. The complete paper will
-compare BF16- and ternary-predictor BitWAM checkpoints against this control over
-matched initial states, multiple seeds, and confidence intervals. [Replace this
-paragraph with final aggregate results before submission.]
+predictor is used only during training and adds no deployed policy latency. In a
+paired seed-0 LIBERO-10 evaluation with five rollouts per task, released BitVLA,
+matched action-only post-training, ternary-head BitWAM, and BF16-head BitWAM achieve
+39/50, 44/50, 45/50, and 47/50 success. Ternary BitWAM meets the predeclared 45/50
+gate and raises the correct-versus-shuffled cosine gap from approximately `5e-4` to
+0.215. Its two-point advantage over action-only is unresolved, however (paired
+bootstrap 95% interval `[-8,+12]` points; exact McNemar p=1.0). Additional training
+seeds are required for a control-improvement claim.
 
 ## 1. Introduction
 
@@ -182,8 +184,8 @@ inference latency, and predictor storage.
 | Action-only | 102,000 | 10 / 10 | verified |
 | BitWAM-BF16 | 101,000 | 10 / 10 | verified halfway |
 | BitWAM-Ternary | 101,000 | 10 / 10 | verified halfway |
-| BitWAM-BF16 | 102,000 | PENDING | active final |
-| BitWAM-Ternary | 102,000 | PENDING | active final |
+| BitWAM-BF16 | 102,000 | 10 / 10 | verified final |
+| BitWAM-Ternary | 102,000 | 10 / 10 | verified final |
 
 The action-only result shows that the conservative continued-training recipe itself
 retains closed-loop behavior. Consequently, matching released BitVLA is a retention
@@ -193,23 +195,43 @@ evaluation. At 1,000 joint updates, both predictor precisions also retain 10/10 
 success; the ternary predictor has future cosine 0.9390 and an action-conditioning gap
 of 0.1842, while BF16 has cosine 0.9414 and a gap of 0.2239.
 
-### 5.2 Predictor diagnostics
+### 5.2 Paired seed-0 evaluation
+
+The next tier uses five rollouts per task with the same ordered initial states:
+
+| Method | Successes / episodes | Rate | Difference vs. action-only |
+| --- | ---: | ---: | ---: |
+| Released BitVLA | 39 / 50 | 78% | -10 points |
+| Action-only | 44 / 50 | 88% | reference |
+| BitWAM-Ternary | 45 / 50 | 90% | +2 points |
+| BitWAM-BF16 | 47 / 50 | 94% | +6 points |
+
+Ternary BitWAM succeeds on four paired states where action-only fails and fails on
+three where action-only succeeds. Its +2-point difference has paired bootstrap 95%
+interval `[-8,+12]` and exact McNemar p=1.0. BF16 versus action-only is +6 points
+with interval `[-2,+14]` and p=0.375. BF16 versus ternary is +4 points with interval
+`[-4,+12]` and p=0.625. Thus this seed establishes a functioning ternary BitWAM and
+passes the 45/50 gate, but does not resolve a control benefit from the world objective
+or a BF16-versus-ternary precision difference.
+
+### 5.3 Predictor diagnostics
 
 The frozen-controller BF16 pretraining stage increases future-latent cosine above
 0.92, and ternary calibration recovers approximately 0.94 in the initial run.
 However, before contrastive post-training the correct-versus-shuffled cosine gap is
 only about `5e-4`. This finding demonstrates why future cosine alone is misleading:
 the predictor can model persistent visual content with minimal action dependence.
-The final analysis will test whether the margin loss materially increases
-`Delta_action` while retaining closed-loop success.
+At 2,000 joint updates, ternary BitWAM reaches future cosine 0.9445 and action gap
+0.2146; BF16 reaches 0.9486 and 0.2449. Both complete 10/10 smoke rollouts, and the
+ternary method completes 45/50 in the seed-0 paired evaluation.
 
 ## 6. Limitations and claim boundaries
 
-The current evidence is limited to simulation and, until the final matrix completes,
-one rollout per task. The auxiliary objective predicts a visual representation, not
-full physical state, and the shuffled-action negative tests dependence rather than
-causal correctness. Results on one released controller do not establish generality
-across VLA families. We therefore avoid “first 1-bit world-action model” and control
+The current evidence is limited to simulation, one training seed, and five rollouts
+per task. The auxiliary objective predicts a visual representation, not full physical
+state, and the shuffled-action negative tests dependence rather than causal
+correctness. Results on one released controller do not establish generality across
+VLA families. We therefore avoid “first 1-bit world-action model” and control
 improvement claims unless the related-work audit and paired multi-seed results
 support them.
 

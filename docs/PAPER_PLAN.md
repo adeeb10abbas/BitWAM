@@ -101,13 +101,17 @@ the predictor learned action-dependent dynamics rather than scene similarity.
   rollouts, despite finite and decreasing training losses.
 - The released native ternary BitVLA control completed 10/10 LIBERO-10 smoke
   rollouts.
-- Frozen-controller BF16 predictor pretraining is active on the cluster and has
-  increased future-latent cosine similarity from approximately 0 to above 0.90.
+- Frozen-controller BF16 predictor pretraining increased future-latent cosine
+  similarity from approximately 0 to above 0.90.
 - The ternary predictor passes strict BF16-checkpoint loading and CUDA backward; all
   effective matrix weights are in `{-1, 0, +1}`.
+- At 2,000 joint updates, ternary BitWAM completed 10/10 smoke rollouts and 45/50 in
+  the paired seed-0 evaluation. Action-only scored 44/50 and BF16-head BitWAM 47/50.
+- The ternary-versus-action-only difference is +2 points with paired bootstrap 95%
+  interval `[-8,+12]`; this does not support an improvement claim.
 
-These observations motivate the method but do not yet establish its closed-loop
-benefit.
+These observations establish that the method works in closed loop, but do not yet
+establish a control benefit over action-only across training seeds.
 
 ## Primary references
 

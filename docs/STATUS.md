@@ -16,6 +16,8 @@ Verified closed-loop LIBERO-10 smoke results, one ordered rollout per task:
 - Matched action-only continued training at step 102,000: 10/10.
 - Joint BF16-head BitWAM at step 101,000: 10/10.
 - Joint ternary-head BitWAM at step 101,000: 10/10.
+- Joint BF16-head BitWAM at step 102,000: 10/10.
+- Joint ternary-head BitWAM at step 102,000: 10/10.
 
 The world-model training path has also passed these gates:
 
@@ -29,11 +31,12 @@ The world-model training path has also passed these gates:
   `5e-4`, exposing a static-scene shortcut. The joint objective now includes a 0.05
   shuffled-action margin.
 
-Two 2,000-update joint runs remain active on the four-B200 Kubernetes pod after both
-passed their 1,000-update closed-loop screen: the primary ternary predictor on GPUs
-1/3 and the BF16 predictor ablation on GPUs 0/2. Each has an automatic 10-task
-evaluator waiting on its final saved checkpoint. The cgroup OOM kill counter has not
-increased during these jobs.
+Both 2,000-update joint runs completed on the four-B200 Kubernetes pod without a new
+OOM kill. In the paired seed-0 evaluation with five rollouts per task, released
+BitVLA scored 39/50, action-only 44/50, ternary-head BitWAM 45/50, and BF16-head
+BitWAM 47/50. Ternary BitWAM therefore meets the 45/50 gate, but its +2-point paired
+difference over action-only has bootstrap 95% interval `[-8,+12]` and exact McNemar
+p=1.0. It is a functioning result, not yet a control-improvement result.
 
 The current local check result is `60 passed, 1 skipped`; the skip is CUDA-only on
 the macOS host. The Python linter passes.
@@ -111,9 +114,9 @@ evaluation schedule, stop rules, and plain-language report format, see
 
 ## Remaining work
 
-- Finish and evaluate the active BF16- and ternary-predictor joint checkpoints.
-- Promote only checkpoints that retain at least 95% of released control success.
-- Run 50 rollouts per task for three seeds with paired initial states.
+- Repeat action-only, BF16-head, and ternary-head post-training for seeds 1 and 2.
+- Run the preregistered 50 rollouts per task with paired initial states after all
+  training seeds are available.
 - Measure packed ternary storage, peak VRAM, training cost, and deployed inference
   latency.
 - Replace pending paper cells with archived multi-seed metrics and confidence

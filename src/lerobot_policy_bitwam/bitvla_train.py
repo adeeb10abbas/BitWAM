@@ -24,12 +24,14 @@ from lerobot_policy_bitwam.bitvla_world import LatentWorldModelHead
 from lerobot_policy_bitwam.workflows import load_config
 
 _RUNTIME_FIELDS = {
+    "action_checkpoint",
     "architecture",
     "config_revision",
     "freeze_policy",
     "metrics_path",
     "num_processes",
     "optimizer_checkpoint",
+    "proprio_checkpoint",
     "save_backbone",
     "stage",
     "upstream_revision",
@@ -62,6 +64,8 @@ class BitVLARuntimeConfig:
     world_contrastive_margin: float
     save_backbone: bool
     world_checkpoint: Path | None
+    action_checkpoint: Path | None
+    proprio_checkpoint: Path | None
     optimizer_checkpoint: Path | None
     metrics_path: Path | None
     seed: int
@@ -108,6 +112,8 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     if weight < 0:
         raise ValueError("world_loss_weight must be non-negative for BitVLA WAM training")
     world_checkpoint = config.get("world_checkpoint")
+    action_checkpoint = config.get("action_checkpoint")
+    proprio_checkpoint = config.get("proprio_checkpoint")
     optimizer_checkpoint = config.get("optimizer_checkpoint")
     metrics_path = config.get("metrics_path")
     world_head_precision = str(config.get("world_head_precision", "bf16"))
@@ -131,6 +137,8 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         world_contrastive_margin=contrastive_margin,
         save_backbone=bool(config.get("save_backbone", True)),
         world_checkpoint=Path(world_checkpoint) if world_checkpoint else None,
+        action_checkpoint=Path(action_checkpoint) if action_checkpoint else None,
+        proprio_checkpoint=Path(proprio_checkpoint) if proprio_checkpoint else None,
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
         metrics_path=Path(metrics_path) if metrics_path else None,
         seed=int(config.get("seed", 0)),
@@ -285,6 +293,33 @@ def _patch_module_wrapping(upstream: ModuleType) -> None:
         return original_wrap_ddp(module, device_id, find_unused)
 
     upstream.wrap_ddp = wrap_ddp
+
+
+def _patch_checkpoint_loading(upstream: ModuleType) -> None:
+    """Allow a cross-embodiment stage to source small heads independently.
+
+    Upstream BitVLA couples the backbone, action head, and proprio projector to
+    one resume directory. DROID world/action mid-training intentionally omits
+    proprio because DROID has seven state values while LIBERO has eight. The
+    LIBERO post-training stage therefore restores the DROID-adapted backbone
+    and action head while loading the released LIBERO proprio projector from
+    its exact checkpoint.
+    """
+    original = upstream.load_checkpoint
+
+    def load_checkpoint(module_name: str, path: str, step: int, device: str = "cpu"):
+        assert _RUNTIME is not None
+        overrides = {
+            "action_head": _RUNTIME.action_checkpoint,
+            "proprio_projector": _RUNTIME.proprio_checkpoint,
+        }
+        checkpoint = overrides.get(module_name)
+        if checkpoint is None:
+            return original(module_name, path, step, device)
+        print(f"Loading explicit {module_name} checkpoint: {checkpoint}")
+        return _load_state(checkpoint)
+
+    upstream.load_checkpoint = load_checkpoint
 
 
 def _patch_optimizer(upstream: ModuleType) -> None:
@@ -518,6 +553,19 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "world_contrastive_weight": _RUNTIME.world_contrastive_weight,
                 "world_contrastive_margin": _RUNTIME.world_contrastive_margin,
                 "freeze_policy": _RUNTIME.freeze_policy,
+                "dataset_name": cfg.dataset_name,
+                "data_root_dir": str(cfg.data_root_dir),
+                "base_model": cfg.vla_path,
+                "seed": _RUNTIME.seed,
+                "batch_size_per_rank": cfg.batch_size,
+                "gradient_accumulation_steps": cfg.grad_accumulation_steps,
+                "use_proprio": cfg.use_proprio,
+                "action_checkpoint": (
+                    str(_RUNTIME.action_checkpoint) if _RUNTIME.action_checkpoint else None
+                ),
+                "proprio_checkpoint": (
+                    str(_RUNTIME.proprio_checkpoint) if _RUNTIME.proprio_checkpoint else None
+                ),
                 "step": log_step,
             }
             (checkpoint_dir / "bitwam_manifest.json").write_text(
@@ -539,6 +587,7 @@ def install_bitwam_patches(upstream: ModuleType) -> None:
         upstream.Bitvla_PaddedCollatorForActionPrediction
     )
     _patch_module_wrapping(upstream)
+    _patch_checkpoint_loading(upstream)
     _patch_optimizer(upstream)
     _patch_metrics(upstream)
     _patch_checkpointing(upstream)

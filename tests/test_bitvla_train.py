@@ -23,6 +23,8 @@ def _config(tmp_path: Path) -> dict:
         "world_head_precision": "ternary",
         "world_contrastive_weight": 1.0,
         "world_contrastive_margin": 0.05,
+        "action_checkpoint": "/checkpoints/action.pt",
+        "proprio_checkpoint": "/checkpoints/proprio.pt",
         "freeze_policy": True,
         "seed": 11,
         "vla_path": "/models/control",
@@ -43,6 +45,8 @@ def test_parse_runtime_config_keeps_world_stage_separate(tmp_path: Path) -> None
     assert runtime.world_head_precision == "ternary"
     assert runtime.world_contrastive_weight == 1.0
     assert runtime.world_contrastive_margin == 0.05
+    assert runtime.action_checkpoint == Path("/checkpoints/action.pt")
+    assert runtime.proprio_checkpoint == Path("/checkpoints/proprio.pt")
     assert runtime.seed == 11
 
 
@@ -55,6 +59,8 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
     assert "--world_head_precision" not in argv
     assert "--world_contrastive_weight" not in argv
     assert "--world_contrastive_margin" not in argv
+    assert "--action_checkpoint" not in argv
+    assert "--proprio_checkpoint" not in argv
     assert "--num_processes" not in argv
 
 

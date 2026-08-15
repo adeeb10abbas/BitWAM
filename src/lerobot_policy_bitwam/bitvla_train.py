@@ -10,6 +10,7 @@ import random
 import re
 import subprocess
 import sys
+import time
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -57,6 +58,7 @@ class BitVLARuntimeConfig:
 
     upstream_root: Path
     upstream_revision: str
+    config_revision: str
     stage: str
     freeze_policy: bool
     world_loss_weight: float
@@ -76,6 +78,7 @@ class BitVLARuntimeConfig:
     optimizer_checkpoint: Path | None
     metrics_path: Path | None
     seed: int
+    batch_size_per_rank: int
 
 
 class _FrozenModule(nn.Module):
@@ -102,6 +105,8 @@ _METRICS = {
     "action_loss": deque(maxlen=128),
 }
 _FORWARD_COUNT = 0
+_EXAMPLES_SEEN = 0
+_FIRST_FORWARD_TIME: float | None = None
 
 
 def _required(config: dict[str, Any], key: str) -> Any:
@@ -140,6 +145,7 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     return BitVLARuntimeConfig(
         upstream_root=upstream_root,
         upstream_revision=str(_required(config, "upstream_revision")),
+        config_revision=str(config.get("config_revision", "unrecorded")),
         stage=str(config.get("stage", "joint_posttrain")),
         freeze_policy=bool(config.get("freeze_policy", False)),
         world_loss_weight=weight,
@@ -161,6 +167,7 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
         metrics_path=Path(metrics_path) if metrics_path else None,
         seed=int(config.get("seed", 0)),
+        batch_size_per_rank=int(config.get("batch_size", 1)),
     )
 
 
@@ -456,12 +463,14 @@ def _run_forward_pass(
     use_proprio=True,
 ):
     del action_tokenizer
-    global _FORWARD_COUNT
+    global _EXAMPLES_SEEN, _FIRST_FORWARD_TIME, _FORWARD_COUNT
     assert _RUNTIME is not None and _WORLD_HEAD is not None
     if not use_l1_regression:
         raise ValueError("BitVLA world post-training requires the L1 action head")
 
     labels = batch["labels"].to(device_id)
+    if _FIRST_FORWARD_TIME is None:
+        _FIRST_FORWARD_TIME = time.monotonic()
     actions = batch["actions"].to(device_id, dtype=torch.bfloat16)
     proprio = batch["proprio"]
     if use_proprio and proprio is not None:
@@ -537,12 +546,31 @@ def _run_forward_pass(
     )
     _METRICS["action_loss"].append(float(action_loss.detach()))
     _FORWARD_COUNT += 1
+    _EXAMPLES_SEEN += batch_size
     if _RUNTIME.metrics_path is not None and _FORWARD_COUNT % 10 == 0:
         rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
         if rank == 0:
+            world_size = (
+                torch.distributed.get_world_size()
+                if torch.distributed.is_initialized()
+                else 1
+            )
+            elapsed = max(time.monotonic() - _FIRST_FORWARD_TIME, 1e-9)
             _RUNTIME.metrics_path.parent.mkdir(parents=True, exist_ok=True)
             payload = {
+                "schema_version": 2,
+                "unix_time_seconds": time.time(),
+                "rank": rank,
+                "world_size": world_size,
                 "micro_step": _FORWARD_COUNT,
+                "elapsed_forward_seconds": elapsed,
+                "examples_seen_per_rank": _EXAMPLES_SEEN,
+                "global_examples_seen": _EXAMPLES_SEEN * world_size,
+                "global_examples_per_second": _EXAMPLES_SEEN * world_size / elapsed,
+                "cuda_memory_allocated_bytes": torch.cuda.memory_allocated(device_id),
+                "cuda_memory_reserved_bytes": torch.cuda.memory_reserved(device_id),
+                "cuda_max_memory_allocated_bytes": torch.cuda.max_memory_allocated(device_id),
+                "cuda_max_memory_reserved_bytes": torch.cuda.max_memory_reserved(device_id),
                 **{name: sum(values) / len(values) for name, values in _METRICS.items()},
             }
             with _RUNTIME.metrics_path.open("a", encoding="utf-8") as stream:
@@ -629,6 +657,7 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
             manifest = {
                 "architecture": "native-bitvla-wam",
                 "stage": _RUNTIME.stage,
+                "config_revision": _RUNTIME.config_revision,
                 "upstream_revision": _RUNTIME.upstream_revision,
                 "world_loss_weight": _RUNTIME.world_loss_weight,
                 "world_learning_rate": _RUNTIME.world_learning_rate,

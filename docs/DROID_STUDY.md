@@ -50,10 +50,11 @@ Stage S1 is deliberately separate from S0. It exercises the complete 1.0.1
 release, the reserved `train[:99%]` slice, and its exact normalization cache
 before an expensive distributed job can allocate GPUs.
 
-The zero-action and action-only controls run on two A100-80GB ranks with doubled
-gradient accumulation, preserving the primary arm's global batch and optimizer
-step count. Their quality comparison is matched; systems comparisons remain
-within hardware and never compare raw A100 time against B200 time.
+The zero-action, shuffled-action, and action-only controls run on two A100-80GB
+ranks with matched or doubled gradient accumulation as needed, preserving the
+corresponding primary arm's global batch and optimizer step count. Their quality
+comparison is matched; systems comparisons remain within hardware and never
+compare raw A100 time against B200 time.
 
 ## Required ablations
 
@@ -62,8 +63,9 @@ within hardware and never compare raw A100 time against B200 time.
 2. DROID action-only mid/post-training with the same optimizer steps and images.
 3. DROID world pretraining without Stage M, isolating the value of joint
    intermediate adaptation.
-4. Random-initialized, zero-action, and shuffled-action world controls,
-   evaluated on the identical held-out episodes and training-split statistics.
+4. Random-initialized, zero-input, shuffled-input, zero-trained, and
+   shuffled-trained world controls, evaluated on the identical held-out
+   episodes and training-split statistics.
 5. BF16 versus ternary world head with identical transferred backbone.
 6. Cosmos3 Edge-Policy-DROID (4B) and Nano-Policy-DROID (16B) on a shared DROID
    episode manifest. Edge is the primary external size comparison.

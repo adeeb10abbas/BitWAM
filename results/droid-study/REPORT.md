@@ -16,6 +16,7 @@ the model interfaces permit it.
 | BitWAM staged | 20k frozen-head | 5k joint | 2k joint/ternary | observed | pending |
 | BitWAM no-M | 20k frozen-head | none | 2k joint/ternary | observed | pending |
 | Visual-only control | 20k frozen-head | none | matched downstream | zero | pending |
+| Shuffled-action control | 20k frozen-head | none | none | within-rank permutation | pending |
 | Action-only control | none | 5k action | 2k action | loss weight zero | pending |
 | Released BitVLA | none | none | none | none | existing reference |
 

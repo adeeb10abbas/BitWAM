@@ -180,14 +180,18 @@ inference latency, and predictor storage.
 | --- | ---: | ---: | --- |
 | Released BitVLA | 100,000 | 10 / 10 | verified |
 | Action-only | 102,000 | 10 / 10 | verified |
-| BitWAM-BF16 | 102,000 | PENDING | active |
-| BitWAM-Ternary | 102,000 | PENDING | active |
+| BitWAM-BF16 | 101,000 | 10 / 10 | verified halfway |
+| BitWAM-Ternary | 101,000 | 10 / 10 | verified halfway |
+| BitWAM-BF16 | 102,000 | PENDING | active final |
+| BitWAM-Ternary | 102,000 | PENDING | active final |
 
 The action-only result shows that the conservative continued-training recipe itself
 retains closed-loop behavior. Consequently, matching released BitVLA is a retention
 result, not evidence that the world objective improves control. A positive BitWAM
 claim requires a paired advantage over action-only across the full multi-seed
-evaluation.
+evaluation. At 1,000 joint updates, both predictor precisions also retain 10/10 smoke
+success; the ternary predictor has future cosine 0.9390 and an action-conditioning gap
+of 0.1842, while BF16 has cosine 0.9414 and a gap of 0.2239.
 
 ### 5.2 Predictor diagnostics
 

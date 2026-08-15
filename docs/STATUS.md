@@ -14,6 +14,8 @@ Verified closed-loop LIBERO-10 smoke results, one ordered rollout per task:
 - Released native BitVLA at step 100,000: 10/10.
 - Matched action-only continued training at step 101,000: 10/10.
 - Matched action-only continued training at step 102,000: 10/10.
+- Joint BF16-head BitWAM at step 101,000: 10/10.
+- Joint ternary-head BitWAM at step 101,000: 10/10.
 
 The world-model training path has also passed these gates:
 
@@ -27,10 +29,11 @@ The world-model training path has also passed these gates:
   `5e-4`, exposing a static-scene shortcut. The joint objective now includes a 0.05
   shuffled-action margin.
 
-Two 2,000-update joint runs are active on the four-B200 Kubernetes pod: the primary
-ternary predictor on GPUs 1/3 and the BF16 predictor ablation on GPUs 0/2. Each has
-an automatic 10-task evaluator waiting on its final saved checkpoint. The cgroup OOM
-kill counter has not increased during these jobs.
+Two 2,000-update joint runs remain active on the four-B200 Kubernetes pod after both
+passed their 1,000-update closed-loop screen: the primary ternary predictor on GPUs
+1/3 and the BF16 predictor ablation on GPUs 0/2. Each has an automatic 10-task
+evaluator waiting on its final saved checkpoint. The cgroup OOM kill counter has not
+increased during these jobs.
 
 The current local check result is `60 passed, 1 skipped`; the skip is CUDA-only on
 the macOS host. The Python linter passes.

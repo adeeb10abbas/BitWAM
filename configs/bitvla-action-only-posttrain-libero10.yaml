@@ -9,6 +9,8 @@ num_processes: 2
 # Compute-matched ablation: execute the future branch but give it no policy gradient.
 freeze_policy: false
 world_loss_weight: 0.0
+world_contrastive_weight: 0.0
+world_contrastive_margin: 0.05
 world_learning_rate: 0.0001
 world_hidden_dim: 2048
 world_action_embedding_dim: 256

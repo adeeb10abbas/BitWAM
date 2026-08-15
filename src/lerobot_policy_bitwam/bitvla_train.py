@@ -36,6 +36,8 @@ _RUNTIME_FIELDS = {
     "upstream_root",
     "world_action_embedding_dim",
     "world_checkpoint",
+    "world_contrastive_margin",
+    "world_contrastive_weight",
     "world_hidden_dim",
     "world_learning_rate",
     "world_loss_weight",
@@ -56,6 +58,8 @@ class BitVLARuntimeConfig:
     world_hidden_dim: int
     world_action_embedding_dim: int
     world_head_precision: str
+    world_contrastive_weight: float
+    world_contrastive_margin: float
     save_backbone: bool
     world_checkpoint: Path | None
     optimizer_checkpoint: Path | None
@@ -83,6 +87,7 @@ _METRICS = {
     "world_cosine_similarity": deque(maxlen=128),
     "world_shuffled_action_loss": deque(maxlen=128),
     "world_action_conditioning_gap": deque(maxlen=128),
+    "world_contrastive_loss": deque(maxlen=128),
     "action_loss": deque(maxlen=128),
 }
 _FORWARD_COUNT = 0
@@ -108,6 +113,10 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     world_head_precision = str(config.get("world_head_precision", "bf16"))
     if world_head_precision not in {"bf16", "ternary"}:
         raise ValueError("world_head_precision must be one of: bf16, ternary")
+    contrastive_weight = float(config.get("world_contrastive_weight", 0.0))
+    contrastive_margin = float(config.get("world_contrastive_margin", 0.05))
+    if contrastive_weight < 0 or contrastive_margin < 0:
+        raise ValueError("world contrastive weight and margin must be non-negative")
     return BitVLARuntimeConfig(
         upstream_root=upstream_root,
         upstream_revision=str(_required(config, "upstream_revision")),
@@ -118,6 +127,8 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         world_hidden_dim=int(config.get("world_hidden_dim", 2048)),
         world_action_embedding_dim=int(config.get("world_action_embedding_dim", 256)),
         world_head_precision=world_head_precision,
+        world_contrastive_weight=contrastive_weight,
+        world_contrastive_margin=contrastive_margin,
         save_backbone=bool(config.get("save_backbone", True)),
         world_checkpoint=Path(world_checkpoint) if world_checkpoint else None,
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
@@ -378,18 +389,30 @@ def _run_forward_pass(
         )
         future_latent = future_features.mean(dim=1)
 
-    world_output = _WORLD_HEAD(action_hidden_states, actions, future_latent)
-    loss = action_loss + _RUNTIME.world_loss_weight * world_output.loss
-    if actions.shape[0] > 1:
-        with torch.no_grad():
-            shuffled_output = _unwrap(_WORLD_HEAD)(
-                action_hidden_states.detach(), actions.roll(1, dims=0), future_latent
-            )
-        shuffled_loss = float(shuffled_output.loss)
-        _METRICS["world_shuffled_action_loss"].append(shuffled_loss)
-        _METRICS["world_action_conditioning_gap"].append(
-            shuffled_loss - float(world_output.loss.detach())
+    shuffled_actions = actions.roll(1, dims=0) if actions.shape[0] > 1 else None
+    world_output = _WORLD_HEAD(
+        action_hidden_states,
+        actions,
+        future_latent,
+        shuffled_actions=shuffled_actions,
+        contrastive_margin=_RUNTIME.world_contrastive_margin,
+    )
+    world_objective = world_output.loss
+    if world_output.contrastive_loss is not None:
+        world_objective = (
+            world_objective
+            + _RUNTIME.world_contrastive_weight * world_output.contrastive_loss
         )
+        _METRICS["world_shuffled_action_loss"].append(
+            float(world_output.shuffled_action_loss.detach())
+        )
+        _METRICS["world_action_conditioning_gap"].append(
+            float(world_output.action_conditioning_gap.detach())
+        )
+        _METRICS["world_contrastive_loss"].append(
+            float(world_output.contrastive_loss.detach())
+        )
+    loss = action_loss + _RUNTIME.world_loss_weight * world_objective
     _METRICS["world_loss"].append(float(world_output.loss.detach()))
     _METRICS["world_cosine_similarity"].append(
         float(world_output.cosine_similarity.detach())
@@ -492,6 +515,8 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "world_loss_weight": _RUNTIME.world_loss_weight,
                 "world_learning_rate": _RUNTIME.world_learning_rate,
                 "world_head_precision": _RUNTIME.world_head_precision,
+                "world_contrastive_weight": _RUNTIME.world_contrastive_weight,
+                "world_contrastive_margin": _RUNTIME.world_contrastive_margin,
                 "freeze_policy": _RUNTIME.freeze_policy,
                 "step": log_step,
             }

@@ -9,6 +9,8 @@ num_processes: 2
 # Quantize the warmed predictor while keeping the released controller immutable.
 freeze_policy: true
 world_loss_weight: 1.0
+world_contrastive_weight: 0.0
+world_contrastive_margin: 0.05
 world_learning_rate: 0.00005
 world_hidden_dim: 2048
 world_action_embedding_dim: 256

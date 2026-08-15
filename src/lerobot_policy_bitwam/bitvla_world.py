@@ -76,6 +76,9 @@ class WorldModelOutput:
     prediction: torch.Tensor
     loss: torch.Tensor
     cosine_similarity: torch.Tensor
+    shuffled_action_loss: torch.Tensor | None = None
+    action_conditioning_gap: torch.Tensor | None = None
+    contrastive_loss: torch.Tensor | None = None
 
 
 class LatentWorldModelHead(nn.Module):
@@ -136,8 +139,13 @@ class LatentWorldModelHead(nn.Module):
         action_hidden_states: torch.Tensor,
         actions: torch.Tensor,
         future_visual_latent: torch.Tensor,
+        *,
+        shuffled_actions: torch.Tensor | None = None,
+        contrastive_margin: float = 0.0,
     ) -> WorldModelOutput:
         """Compute a scale-invariant future-representation prediction objective."""
+        if contrastive_margin < 0:
+            raise ValueError("contrastive_margin must be non-negative")
         prediction = self.predict(action_hidden_states, actions)
         if future_visual_latent.shape != prediction.shape:
             raise ValueError(
@@ -146,10 +154,25 @@ class LatentWorldModelHead(nn.Module):
             )
         normalized_prediction = F.normalize(prediction.float(), dim=-1)
         normalized_target = F.normalize(future_visual_latent.detach().float(), dim=-1)
-        cosine_similarity = (normalized_prediction * normalized_target).sum(dim=-1).mean()
+        cosine_similarities = (normalized_prediction * normalized_target).sum(dim=-1)
+        cosine_similarity = cosine_similarities.mean()
         loss = 1.0 - cosine_similarity
+        shuffled_action_loss = None
+        action_conditioning_gap = None
+        contrastive_loss = None
+        if shuffled_actions is not None:
+            shuffled_prediction = self.predict(action_hidden_states, shuffled_actions)
+            normalized_shuffled = F.normalize(shuffled_prediction.float(), dim=-1)
+            shuffled_similarities = (normalized_shuffled * normalized_target).sum(dim=-1)
+            shuffled_action_loss = 1.0 - shuffled_similarities.mean()
+            per_example_gap = cosine_similarities - shuffled_similarities
+            action_conditioning_gap = per_example_gap.mean()
+            contrastive_loss = F.relu(contrastive_margin - per_example_gap).mean()
         return WorldModelOutput(
             prediction=prediction,
             loss=loss,
             cosine_similarity=cosine_similarity,
+            shuffled_action_loss=shuffled_action_loss,
+            action_conditioning_gap=action_conditioning_gap,
+            contrastive_loss=contrastive_loss,
         )

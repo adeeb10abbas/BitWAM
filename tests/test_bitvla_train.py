@@ -21,6 +21,8 @@ def _config(tmp_path: Path) -> dict:
         "world_loss_weight": 0.25,
         "world_learning_rate": 2e-4,
         "world_head_precision": "ternary",
+        "world_contrastive_weight": 1.0,
+        "world_contrastive_margin": 0.05,
         "freeze_policy": True,
         "seed": 11,
         "vla_path": "/models/control",
@@ -39,6 +41,8 @@ def test_parse_runtime_config_keeps_world_stage_separate(tmp_path: Path) -> None
     assert runtime.world_loss_weight == 0.25
     assert runtime.world_learning_rate == 2e-4
     assert runtime.world_head_precision == "ternary"
+    assert runtime.world_contrastive_weight == 1.0
+    assert runtime.world_contrastive_margin == 0.05
     assert runtime.seed == 11
 
 
@@ -49,6 +53,8 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
     assert argv[argv.index("--use_proprio") + 1] == "True"
     assert "--world_loss_weight" not in argv
     assert "--world_head_precision" not in argv
+    assert "--world_contrastive_weight" not in argv
+    assert "--world_contrastive_margin" not in argv
     assert "--num_processes" not in argv
 
 
@@ -65,3 +71,14 @@ def test_runtime_config_rejects_negative_world_loss(tmp_path: Path) -> None:
 def test_runtime_config_rejects_unknown_world_head_precision(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="world_head_precision"):
         parse_runtime_config(_config(tmp_path) | {"world_head_precision": "int4"})
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    (("world_contrastive_weight", -1.0), ("world_contrastive_margin", -0.1)),
+)
+def test_runtime_config_rejects_negative_contrastive_settings(
+    tmp_path: Path, field: str, value: float
+) -> None:
+    with pytest.raises(ValueError, match="contrastive"):
+        parse_runtime_config(_config(tmp_path) | {field: value})

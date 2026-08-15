@@ -42,7 +42,17 @@ per-token 8-bit activation quantization, and straight-through gradients:
 
 `L_world = 1 - cosine(z_hat_t+H, stopgrad(z_t+H))`
 
-`L_total = L_action + lambda * L_world`
+To prevent a static-scene shortcut, a within-batch negative pairs the same action
+token state with another trajectory's action chunk. Let `z_hat^-_t+H` be the
+prediction produced with the shuffled action. The action-conditioning objective is
+
+`L_contrast = max(0, m - cosine(z_hat_t+H, z_t+H) + cosine(z_hat^-_t+H, z_t+H))`
+
+`L_total = L_action + lambda * (L_world + beta * L_contrast)`
+
+The primary run uses `m = 0.05` and `beta = 1`. We report the correct-minus-shuffled
+cosine gap as a diagnostic; future-state cosine alone is insufficient evidence of
+action-conditioned prediction.
 
 The future frame is a target only. It never enters the student policy input. The
 visual target space remains fixed during joint training.
@@ -53,7 +63,8 @@ Training has three explicit stages:
 2. Convert the warmed head to ternary forward passes and calibrate it while the
    controller remains frozen.
 3. Jointly post-train action and world losses with a conservative policy learning
-   rate; discard the predictor for deployed action inference.
+   rate; jointly optimize the shuffled-action margin; discard the predictor for
+   deployed action inference.
 
 ## Required comparisons
 

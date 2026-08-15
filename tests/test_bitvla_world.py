@@ -44,6 +44,46 @@ def test_latent_world_head_has_finite_loss_and_gradients() -> None:
     assert all(parameter.grad is not None for parameter in head.parameters())
 
 
+def test_latent_world_head_penalizes_insufficient_action_conditioning() -> None:
+    torch.manual_seed(0)
+    head = LatentWorldModelHead(
+        16,
+        action_chunk_size=2,
+        action_dim=3,
+        action_embedding_dim=8,
+        hidden_dim=24,
+    )
+    hidden = torch.randn(4, 6, 16)
+    actions = torch.randn(4, 2, 3)
+    target = torch.randn(4, 16)
+
+    output = head(
+        hidden,
+        actions,
+        target,
+        shuffled_actions=actions.roll(1, dims=0),
+        contrastive_margin=0.05,
+    )
+
+    assert output.shuffled_action_loss is not None
+    assert output.action_conditioning_gap is not None
+    assert output.contrastive_loss is not None
+    assert torch.isfinite(output.contrastive_loss)
+    expected = torch.relu(0.05 - output.action_conditioning_gap)
+    assert output.contrastive_loss >= expected - 1e-6
+
+
+def test_latent_world_head_rejects_negative_contrastive_margin() -> None:
+    head = LatentWorldModelHead(16, action_chunk_size=2, action_dim=3)
+    with pytest.raises(ValueError, match="contrastive_margin"):
+        head(
+            torch.randn(2, 6, 16),
+            torch.randn(2, 2, 3),
+            torch.randn(2, 16),
+            contrastive_margin=-0.01,
+        )
+
+
 def test_latent_world_head_rejects_wrong_action_shape() -> None:
     head = LatentWorldModelHead(16, action_chunk_size=2, action_dim=3)
     with pytest.raises(ValueError, match="actions must have shape"):

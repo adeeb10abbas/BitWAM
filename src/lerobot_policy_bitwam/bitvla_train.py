@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 from collections import deque
@@ -32,6 +33,7 @@ _RUNTIME_FIELDS = {
     "num_processes",
     "optimizer_checkpoint",
     "proprio_checkpoint",
+    "rlds_split",
     "save_backbone",
     "stage",
     "upstream_revision",
@@ -66,6 +68,7 @@ class BitVLARuntimeConfig:
     world_checkpoint: Path | None
     action_checkpoint: Path | None
     proprio_checkpoint: Path | None
+    rlds_split: str | None
     optimizer_checkpoint: Path | None
     metrics_path: Path | None
     seed: int
@@ -114,6 +117,9 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     world_checkpoint = config.get("world_checkpoint")
     action_checkpoint = config.get("action_checkpoint")
     proprio_checkpoint = config.get("proprio_checkpoint")
+    rlds_split = config.get("rlds_split")
+    if rlds_split is not None and not re.fullmatch(r"train(?:\[\d*%?:\d*%?\])?", str(rlds_split)):
+        raise ValueError("rlds_split must be a deterministic slice of the train split")
     optimizer_checkpoint = config.get("optimizer_checkpoint")
     metrics_path = config.get("metrics_path")
     world_head_precision = str(config.get("world_head_precision", "bf16"))
@@ -139,6 +145,7 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         world_checkpoint=Path(world_checkpoint) if world_checkpoint else None,
         action_checkpoint=Path(action_checkpoint) if action_checkpoint else None,
         proprio_checkpoint=Path(proprio_checkpoint) if proprio_checkpoint else None,
+        rlds_split=str(rlds_split) if rlds_split else None,
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
         metrics_path=Path(metrics_path) if metrics_path else None,
         seed=int(config.get("seed", 0)),
@@ -222,6 +229,28 @@ def _install_future_frame_patch() -> None:
         return result
 
     traj_transforms.chunk_act_obs = chunk_act_obs_with_future
+
+
+def _install_rlds_split_patch() -> None:
+    """Apply the configured DROID train/holdout slice before statistics or decoding."""
+    import dlimp as dl
+
+    original = dl.DLataset.from_rlds
+
+    def from_rlds(builder, split="train", shuffle=True, num_parallel_reads=-1):
+        assert _RUNTIME is not None
+        builder_name = str(getattr(builder, "name", "")).lower()
+        is_droid = "droid" in builder_name or builder_name == "r2d2_faceblur"
+        if _RUNTIME.rlds_split is not None and is_droid and split in {"all", "train"}:
+            split = _RUNTIME.rlds_split
+        return original(
+            builder,
+            split=split,
+            shuffle=shuffle,
+            num_parallel_reads=num_parallel_reads,
+        )
+
+    dl.DLataset.from_rlds = staticmethod(from_rlds)
 
 
 def _future_transform_class(base_class):
@@ -560,6 +589,7 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "batch_size_per_rank": cfg.batch_size,
                 "gradient_accumulation_steps": cfg.grad_accumulation_steps,
                 "use_proprio": cfg.use_proprio,
+                "rlds_split": _RUNTIME.rlds_split,
                 "action_checkpoint": (
                     str(_RUNTIME.action_checkpoint) if _RUNTIME.action_checkpoint else None
                 ),
@@ -580,6 +610,7 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
 def install_bitwam_patches(upstream: ModuleType) -> None:
     """Install the narrow data, loss, optimizer, and checkpoint integration."""
     _install_future_frame_patch()
+    _install_rlds_split_patch()
     upstream.BitVLA_RLDSBatchTransform = _future_transform_class(
         upstream.BitVLA_RLDSBatchTransform
     )

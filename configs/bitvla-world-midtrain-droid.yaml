@@ -5,6 +5,7 @@ upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_joint_action_world_midtrain
 seed: 0
 num_processes: 4
+rlds_split: train[:99%]
 
 # Stage M: adapt the action-token pathway after the frozen-head stage. Vision
 # remains frozen so the future target space cannot move under its own loss.

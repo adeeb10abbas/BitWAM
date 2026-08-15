@@ -25,6 +25,7 @@ def _config(tmp_path: Path) -> dict:
         "world_contrastive_margin": 0.05,
         "action_checkpoint": "/checkpoints/action.pt",
         "proprio_checkpoint": "/checkpoints/proprio.pt",
+        "rlds_split": "train[:99%]",
         "freeze_policy": True,
         "seed": 11,
         "vla_path": "/models/control",
@@ -47,6 +48,7 @@ def test_parse_runtime_config_keeps_world_stage_separate(tmp_path: Path) -> None
     assert runtime.world_contrastive_margin == 0.05
     assert runtime.action_checkpoint == Path("/checkpoints/action.pt")
     assert runtime.proprio_checkpoint == Path("/checkpoints/proprio.pt")
+    assert runtime.rlds_split == "train[:99%]"
     assert runtime.seed == 11
 
 
@@ -61,6 +63,7 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
     assert "--world_contrastive_margin" not in argv
     assert "--action_checkpoint" not in argv
     assert "--proprio_checkpoint" not in argv
+    assert "--rlds_split" not in argv
     assert "--num_processes" not in argv
 
 
@@ -77,6 +80,12 @@ def test_runtime_config_rejects_negative_world_loss(tmp_path: Path) -> None:
 def test_runtime_config_rejects_unknown_world_head_precision(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="world_head_precision"):
         parse_runtime_config(_config(tmp_path) | {"world_head_precision": "int4"})
+
+
+@pytest.mark.parametrize("split", ("val", "train+test", "train[:99%] ", "train[::2]"))
+def test_runtime_config_rejects_non_deterministic_train_slice(tmp_path: Path, split: str) -> None:
+    with pytest.raises(ValueError, match="rlds_split"):
+        parse_runtime_config(_config(tmp_path) | {"rlds_split": split})
 
 
 @pytest.mark.parametrize(

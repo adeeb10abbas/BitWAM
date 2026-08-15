@@ -26,16 +26,17 @@ proprio, and the exact released LIBERO projector is restored for post-training.
 | Integrity | object size and MD5 verified; download manifest stored beside data |
 | Training state | no DROID proprio; released LIBERO proprio restored only at Stage F |
 
-The full release has no official validation split. Paper metrics must therefore
-use a deterministic episode-level holdout keyed by `episode_metadata.file_path`;
-the smoke set is an infrastructure check and must not be presented as an
-independent validation result.
+The full release has no official validation split. Stage P and M use the
+deterministic TFDS slice `train[:99%]`; `train[99%:]` is reserved before
+normalization statistics, decoding, or augmentation. The smoke set is an
+infrastructure check and must not be presented as an independent validation
+result.
 
 ## Stages and gates
 
 | Stage | Updates | Global batch | Trainable components | Gate |
 | --- | ---: | ---: | --- | --- |
-| S: DROID-100 smoke | 1 | 2 | BF16 world head | verified schema, finite loss, checkpoint |
+| S: DROID-100 smoke | 2 | 2 | BF16 world head | verified schema, finite loss, checkpoint |
 | P: DROID pretrain | 20,000 | 256 | BF16 world head | held-out cosine improves over initialization and shuffled actions |
 | M: DROID midtrain | 5,000 | 128 | action pathway + BF16 world head | positive action-conditioning gap without action regression collapse |
 | F: LIBERO posttrain | 2,000 | 128 | action pathway + ternary world head | ordered 10-task smoke, then paired 50-episode evaluation |

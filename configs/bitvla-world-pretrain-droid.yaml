@@ -5,6 +5,7 @@ upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_frozen_world_pretrain
 seed: 0
 num_processes: 4
+rlds_split: train[:99%]
 
 # Stage P: fit an action-conditioned future-latent head while preserving the
 # released BitVLA controller. Global effective batch = 4 * 8 * 8 = 256.

@@ -50,6 +50,12 @@ Stage S1 is deliberately separate from S0. It exercises the complete 1.0.1
 release, the reserved `train[:99%]` slice, and its exact normalization cache
 before an expensive distributed job can allocate GPUs.
 
+The Stage-M action-collapse gate is fixed before launch: the final 128-microbatch
+rolling action L1 must be no more than 5% above the first logged 10-microbatch
+mean from the same arm, and the final observed-minus-shuffled action-conditioning
+gap must be positive. The matched action-only arm is reported alongside this
+within-run gate but does not substitute for it.
+
 The zero-action, shuffled-action, and action-only controls run on two A100-80GB
 ranks with matched or doubled gradient accumulation as needed, preserving the
 corresponding primary arm's global batch and optimizer step count. Their quality

@@ -32,6 +32,7 @@ def _config(tmp_path: Path) -> dict:
         "seed": 11,
         "vla_path": "/models/control",
         "use_proprio": True,
+        "wandb_log_freq": 7,
         "max_steps": 102000,
         "_config_path": "/configs/stage1.yaml",
         "output_dir": "/runs/stage1",
@@ -53,6 +54,7 @@ def test_parse_runtime_config_keeps_world_stage_separate(tmp_path: Path) -> None
     assert runtime.rlds_split == "train[:99%]"
     assert runtime.dataset_statistics_path == Path("/data/statistics.json")
     assert runtime.world_action_mode == "shuffled"
+    assert runtime.metrics_log_frequency == 7
     assert runtime.seed == 11
 
 
@@ -91,6 +93,11 @@ def test_runtime_config_rejects_unknown_world_head_precision(tmp_path: Path) -> 
 def test_runtime_config_rejects_unknown_world_action_mode(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="world_action_mode"):
         parse_runtime_config(_config(tmp_path) | {"world_action_mode": "permuted"})
+
+
+def test_runtime_config_rejects_nonpositive_metrics_frequency(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="wandb_log_freq"):
+        parse_runtime_config(_config(tmp_path) | {"wandb_log_freq": 0})
 
 
 @pytest.mark.parametrize("split", ("val", "train+test", "train[:99%] ", "train[::2]"))

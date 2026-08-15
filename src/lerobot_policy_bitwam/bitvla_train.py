@@ -77,6 +77,7 @@ class BitVLARuntimeConfig:
     dataset_statistics_path: Path | None
     optimizer_checkpoint: Path | None
     metrics_path: Path | None
+    metrics_log_frequency: int
     seed: int
     batch_size_per_rank: int
 
@@ -142,6 +143,9 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     contrastive_margin = float(config.get("world_contrastive_margin", 0.05))
     if contrastive_weight < 0 or contrastive_margin < 0:
         raise ValueError("world contrastive weight and margin must be non-negative")
+    metrics_log_frequency = int(config.get("wandb_log_freq", 10))
+    if metrics_log_frequency < 1:
+        raise ValueError("wandb_log_freq must be positive")
     return BitVLARuntimeConfig(
         upstream_root=upstream_root,
         upstream_revision=str(_required(config, "upstream_revision")),
@@ -166,6 +170,7 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         ),
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
         metrics_path=Path(metrics_path) if metrics_path else None,
+        metrics_log_frequency=metrics_log_frequency,
         seed=int(config.get("seed", 0)),
         batch_size_per_rank=int(config.get("batch_size", 1)),
     )
@@ -547,7 +552,10 @@ def _run_forward_pass(
     _METRICS["action_loss"].append(float(action_loss.detach()))
     _FORWARD_COUNT += 1
     _EXAMPLES_SEEN += batch_size
-    if _RUNTIME.metrics_path is not None and _FORWARD_COUNT % 10 == 0:
+    if (
+        _RUNTIME.metrics_path is not None
+        and _FORWARD_COUNT % _RUNTIME.metrics_log_frequency == 0
+    ):
         rank = torch.distributed.get_rank() if torch.distributed.is_initialized() else 0
         if rank == 0:
             world_size = (

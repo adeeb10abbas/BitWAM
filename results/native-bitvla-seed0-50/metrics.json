@@ -1,0 +1,86 @@
+{
+  "methods": {
+    "control": {
+      "successes": 39,
+      "episodes": 50,
+      "success_rate": 0.78,
+      "evaluation_seconds_from_log": 791.0,
+      "per_task_successes": [5, 5, 5, 4, 3, 5, 3, 3, 1, 5],
+      "failed_episode_indices_zero_based": [17, 21, 23, 32, 34, 36, 38, 41, 42, 43, 44]
+    },
+    "action_only": {
+      "successes": 44,
+      "episodes": 50,
+      "success_rate": 0.88,
+      "evaluation_seconds_from_log": 761.0,
+      "per_task_successes": [5, 5, 5, 4, 4, 5, 5, 4, 3, 4],
+      "failed_episode_indices_zero_based": [17, 21, 38, 42, 43, 48]
+    },
+    "ternary": {
+      "successes": 45,
+      "episodes": 50,
+      "success_rate": 0.90,
+      "evaluation_seconds_from_log": 722.0,
+      "per_task_successes": [4, 5, 5, 4, 5, 5, 4, 5, 3, 5],
+      "failed_episode_indices_zero_based": [4, 17, 34, 42, 44]
+    },
+    "bf16": {
+      "successes": 47,
+      "episodes": 50,
+      "success_rate": 0.94,
+      "evaluation_seconds_from_log": 711.0,
+      "per_task_successes": [5, 5, 5, 5, 5, 5, 5, 5, 2, 5],
+      "failed_episode_indices_zero_based": [42, 43, 44]
+    }
+  },
+  "paired_comparisons": {
+    "action_only_minus_control": {
+      "difference": 0.10,
+      "paired_bootstrap_95_ci": [0.00, 0.20],
+      "discordant_wins": 6,
+      "discordant_losses": 1,
+      "exact_mcnemar_p": 0.125
+    },
+    "ternary_minus_control": {
+      "difference": 0.12,
+      "paired_bootstrap_95_ci": [0.02, 0.22],
+      "discordant_wins": 7,
+      "discordant_losses": 1,
+      "exact_mcnemar_p": 0.0703125
+    },
+    "bf16_minus_control": {
+      "difference": 0.16,
+      "paired_bootstrap_95_ci": [0.06, 0.26],
+      "discordant_wins": 8,
+      "discordant_losses": 0,
+      "exact_mcnemar_p": 0.0078125
+    },
+    "ternary_minus_action_only": {
+      "difference": 0.02,
+      "paired_bootstrap_95_ci": [-0.08, 0.12],
+      "discordant_wins": 4,
+      "discordant_losses": 3,
+      "exact_mcnemar_p": 1.0
+    },
+    "bf16_minus_action_only": {
+      "difference": 0.06,
+      "paired_bootstrap_95_ci": [-0.02, 0.14],
+      "discordant_wins": 4,
+      "discordant_losses": 1,
+      "exact_mcnemar_p": 0.375
+    },
+    "bf16_minus_ternary": {
+      "difference": 0.04,
+      "paired_bootstrap_95_ci": [-0.04, 0.12],
+      "discordant_wins": 3,
+      "discordant_losses": 1,
+      "exact_mcnemar_p": 0.625
+    }
+  },
+  "bootstrap": {
+    "replicates": 100000,
+    "seed": 0,
+    "unit": "paired_episode_index",
+    "interval": "percentile"
+  }
+}

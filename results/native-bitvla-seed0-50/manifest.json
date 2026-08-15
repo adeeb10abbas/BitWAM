@@ -1,0 +1,34 @@
+{
+  "run_id": "native-bitvla-seed0-50",
+  "status": "completed",
+  "architecture": "native-bitvla-comparison",
+  "evaluation_seed": 7,
+  "episodes_per_method": 50,
+  "episodes_per_task": 5,
+  "task_count": 10,
+  "bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7",
+  "method_revision": "d57e5b4",
+  "hardware": "4x NVIDIA B200, one evaluation per GPU",
+  "methods": {
+    "control": {
+      "config": "configs/bitvla-control-eval-50.yaml",
+      "checkpoint": "/data/users/ali/bitvla_models/ft-libero-long",
+      "log": "/data/users/ali/logs/bitvla-control-eval-50.log"
+    },
+    "action_only": {
+      "config": "configs/bitvla-action-only-eval-50.yaml",
+      "checkpoint": "/data/users/ali/bitvla_runs/bitvla-action-only-posttrain--102000_chkpt",
+      "log": "/data/users/ali/logs/bitvla-action-only-eval-50.log"
+    },
+    "ternary": {
+      "config": "configs/bitvla-world-eval-50.yaml",
+      "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+      "log": "/data/users/ali/logs/bitvla-world-eval-50.log"
+    },
+    "bf16": {
+      "config": "configs/bitvla-world-bf16-eval-50.yaml",
+      "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-bf16-posttrain--102000_chkpt",
+      "log": "/data/users/ali/logs/bitvla-world-bf16-eval-50.log"
+    }
+  }
+}

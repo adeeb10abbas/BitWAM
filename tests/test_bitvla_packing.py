@@ -4,6 +4,7 @@ from torch import nn
 from lerobot_policy_bitwam.bitvla_packing import (
     dequantize_packed_weight,
     pack_bitlinear_weights,
+    quantize_activation,
     quantize_activation_int8,
     unpack_packed_weight_int8_transposed,
 )
@@ -98,3 +99,12 @@ def test_activation_quantization_returns_int8_and_inverse_scale() -> None:
     assert inverse_scale.dtype == torch.float32
     reconstructed = quantized.float() * inverse_scale
     assert torch.allclose(reconstructed, inputs.float(), atol=0.01)
+
+
+def test_activation_quantization_matches_bitvla_formula() -> None:
+    inputs = torch.tensor([[0.0, -1.0, 0.5], [2.0, -0.5, 1.0]], dtype=torch.bfloat16)
+    values = inputs.float()
+    scale = 127 / values.abs().amax(dim=-1, keepdim=True).clamp(min=1e-5)
+    expected = ((values * scale).round().clamp(-128, 127) / scale).to(inputs.dtype)
+
+    assert torch.equal(quantize_activation(inputs), expected)

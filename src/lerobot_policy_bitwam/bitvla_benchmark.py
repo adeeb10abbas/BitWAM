@@ -18,6 +18,7 @@ import torch
 
 from lerobot_policy_bitwam.bitvla_evaluate import _load_upstream_evaluator
 from lerobot_policy_bitwam.bitvla_packing import (
+    enable_compiled_bitlinear_runtime,
     enable_compiled_bitlinear_unpack,
     enable_torch_int8_bitlinear_runtime,
     pack_bitlinear_weights,
@@ -153,9 +154,7 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     torch.cuda.reset_peak_memory_stats()
     free_before, _ = torch.cuda.mem_get_info()
     load_started = time.perf_counter()
-    model, action_head, proprio_projector, noisy_action_projector, processor = (
-        evaluator.initialize_model(cfg)
-    )
+    model, action_head, proprio_projector, noisy_action_projector, processor = evaluator.initialize_model(cfg)
     packing = None
     if bool(config.get("packed_runtime", False)):
         packing = pack_bitlinear_weights(
@@ -165,6 +164,8 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
         packed_backend = str(config.get("packed_runtime_backend", "eager_unpack"))
         if packed_backend == "compiled_unpack":
             packing["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
+        elif packed_backend == "compiled":
+            packing["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
         elif packed_backend == "torch_int8":
             packing["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
         elif packed_backend != "eager_unpack":

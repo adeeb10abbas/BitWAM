@@ -1,0 +1,15 @@
+{
+  "optimizer_updates": 1000,
+  "early_window": {
+    "metric_records": 100,
+    "world_loss": 0.6189322599,
+    "world_cosine_similarity": 0.3810677397
+  },
+  "last_window_before_checkpoint": {
+    "metric_records": 100,
+    "world_loss": 0.0794058025,
+    "world_cosine_similarity": 0.9205941975
+  },
+  "action_head_max_abs_diff_from_control": 0.0,
+  "proprio_projector_max_abs_diff_from_control": 0.0
+}

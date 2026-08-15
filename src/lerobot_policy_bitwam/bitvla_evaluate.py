@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import json
 import os
 import subprocess
 import sys
@@ -13,6 +14,40 @@ from types import ModuleType
 from typing import Any
 
 from lerobot_policy_bitwam.workflows import load_config
+
+
+def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> None:
+    """Wrap upstream model initialization with BitWAM's packed inference conversion."""
+    from lerobot_policy_bitwam.bitvla_packing import (
+        enable_compiled_bitlinear_runtime,
+        enable_compiled_bitlinear_unpack,
+        enable_torch_int8_bitlinear_runtime,
+        pack_bitlinear_weights,
+    )
+
+    original_initialize = evaluator.initialize_model
+
+    def initialize_packed(cfg: Any) -> tuple[Any, ...]:
+        components = original_initialize(cfg)
+        model = components[0]
+        report = pack_bitlinear_weights(
+            model,
+            scope=str(config.get("packed_scope", "all")),
+        ).to_dict()
+        backend = str(config.get("packed_runtime_backend", "compiled_unpack"))
+        if backend == "compiled_unpack":
+            report["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
+        elif backend == "compiled":
+            report["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
+        elif backend == "torch_int8":
+            report["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
+        elif backend != "eager_unpack":
+            raise ValueError(f"Unsupported packed_runtime_backend: {backend}")
+        report["backend"] = backend
+        print("BitWAM packed runtime: " + json.dumps(report, sort_keys=True))
+        return components
+
+    evaluator.initialize_model = initialize_packed
 
 
 def _required(config: dict[str, Any], key: str) -> Any:
@@ -61,9 +96,7 @@ def _load_upstream_evaluator(config: dict[str, Any]) -> ModuleType:
         text=True,
     ).stdout.strip()
     if revision != expected_revision:
-        raise ValueError(
-            f"BitVLA revision mismatch: expected {expected_revision}, found {revision}"
-        )
+        raise ValueError(f"BitVLA revision mismatch: expected {expected_revision}, found {revision}")
 
     openvla_root = upstream_root / "openvla-oft"
     libero_root = upstream_root / "LIBERO"
@@ -103,6 +136,8 @@ def main(argv: Sequence[str] | None = None) -> None:
     if config.get("architecture") != "bitvla":
         raise ValueError("BitVLA evaluation configs must set architecture: bitvla")
     evaluator = _load_upstream_evaluator(config)
+    if bool(config.get("packed_runtime", False)):
+        _enable_packed_runtime(evaluator, config)
     sys.argv = build_upstream_eval_argv(config)
     evaluator.eval_libero()
 

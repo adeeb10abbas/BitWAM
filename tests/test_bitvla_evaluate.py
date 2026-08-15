@@ -1,8 +1,10 @@
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
-from lerobot_policy_bitwam.bitvla_evaluate import build_upstream_eval_argv
+from lerobot_policy_bitwam.bitvla_evaluate import _enable_packed_runtime, build_upstream_eval_argv
 from lerobot_policy_bitwam.workflows import build_evaluate_command
 
 
@@ -37,3 +39,20 @@ def test_workflow_routes_bitvla_evaluation_to_native_wrapper(tmp_path: Path) -> 
     command = build_evaluate_command(_config(tmp_path))
     assert command[1:3] == ("-m", "lerobot_policy_bitwam.bitvla_evaluate")
     assert command[-1] == str(tmp_path / "eval.yaml")
+
+
+def test_packed_runtime_wraps_upstream_model_initialization(monkeypatch, capsys) -> None:
+    report = Mock()
+    report.to_dict.return_value = {"packed_layers": 2}
+    pack = Mock(return_value=report)
+    monkeypatch.setattr("lerobot_policy_bitwam.bitvla_packing.pack_bitlinear_weights", pack)
+    evaluator = SimpleNamespace(initialize_model=lambda _cfg: ("model", "head"))
+
+    _enable_packed_runtime(
+        evaluator,
+        {"packed_scope": "text", "packed_runtime_backend": "eager_unpack"},
+    )
+
+    assert evaluator.initialize_model("cfg") == ("model", "head")
+    pack.assert_called_once_with("model", scope="text")
+    assert '"backend": "eager_unpack"' in capsys.readouterr().out

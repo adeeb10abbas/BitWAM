@@ -1,5 +1,5 @@
 architecture: bitvla
-config_revision: TO_BE_PINNED
+config_revision: f710838
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 checkpoint: /data/users/ali/bitvla_runs/bitvla-action-only-posttrain--101000_chkpt

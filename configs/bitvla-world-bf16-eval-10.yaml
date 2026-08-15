@@ -1,0 +1,11 @@
+architecture: bitvla
+config_revision: TO_BE_PINNED
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+checkpoint: /data/users/ali/bitvla_runs/bitwam-world-bf16-posttrain--105000_chkpt
+output_dir: /data/users/ali/bitvla_evals/bitwam-world-bf16-105000-10
+run_id: bitwam-world-bf16-105000
+task_suite_name: libero_10
+episodes: 10
+task_count: 10
+seed: 7

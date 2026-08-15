@@ -81,6 +81,8 @@ _SCHEDULER: Any = None
 _METRICS = {
     "world_loss": deque(maxlen=128),
     "world_cosine_similarity": deque(maxlen=128),
+    "world_shuffled_action_loss": deque(maxlen=128),
+    "world_action_conditioning_gap": deque(maxlen=128),
     "action_loss": deque(maxlen=128),
 }
 _FORWARD_COUNT = 0
@@ -378,6 +380,16 @@ def _run_forward_pass(
 
     world_output = _WORLD_HEAD(action_hidden_states, actions, future_latent)
     loss = action_loss + _RUNTIME.world_loss_weight * world_output.loss
+    if actions.shape[0] > 1:
+        with torch.no_grad():
+            shuffled_output = _unwrap(_WORLD_HEAD)(
+                action_hidden_states.detach(), actions.roll(1, dims=0), future_latent
+            )
+        shuffled_loss = float(shuffled_output.loss)
+        _METRICS["world_shuffled_action_loss"].append(shuffled_loss)
+        _METRICS["world_action_conditioning_gap"].append(
+            shuffled_loss - float(world_output.loss.detach())
+        )
     _METRICS["world_loss"].append(float(world_output.loss.detach()))
     _METRICS["world_cosine_similarity"].append(
         float(world_output.cosine_similarity.detach())

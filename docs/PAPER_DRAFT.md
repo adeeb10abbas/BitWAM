@@ -112,7 +112,12 @@ chunk, and applies a three-matrix residual MLP:
 
 For the primary model, every predictor matrix uses absmean ternary weights in
 `{-alpha, 0, +alpha}`, per-token INT8 activation quantization, and a straight-through
-gradient estimator. The base prediction loss is
+gradient estimator. The head has 11,034,368 trainable parameters, of which
+11,024,384 (99.91%) belong to the three ternary matrices. Those eligible matrices
+require 2.76 MB under a simple two-bit packing or a theoretical 2.18 MB under
+entropy-optimal ternary coding; the current training checkpoint intentionally retains
+BF16 master weights and is not evidence of a packed runtime. The base prediction loss
+is
 
 `L_world = 1 - cos(z_hat_t+H, z_t+H)`.
 

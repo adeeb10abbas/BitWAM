@@ -137,7 +137,7 @@ def enable_compiled_bitlinear_unpack(module: nn.Module) -> int:
 def enable_compiled_bitlinear_runtime(module: nn.Module) -> int:
     """Fuse both activation quantization and packed-weight decoding for inference."""
     compiled_dequantize = torch.compile(dequantize_packed_weight, fullgraph=True, dynamic=False)
-    compiled_activation_quant = torch.compile(quantize_activation, fullgraph=True, dynamic=False)
+    compiled_activation_quant = torch.compile(quantize_activation, fullgraph=True, dynamic=True)
     optimized_layers = 0
     for candidate in module.modules():
         if candidate.__class__.__name__ != "BitLinear" or not bool(getattr(candidate, "enable_qlora", False)):

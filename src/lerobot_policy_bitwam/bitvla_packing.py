@@ -16,6 +16,7 @@ from torch.nn import functional as F
 class PackingReport:
     """Persistent-storage accounting for converted BitLinear matrices."""
 
+    scope: str
     packed_layers: int
     packed_weight_count: int
     bf16_weight_bytes_replaced: int
@@ -160,8 +161,19 @@ def enable_torch_int8_bitlinear_runtime(module: nn.Module) -> int:
     return optimized_layers
 
 
+def _matches_scope(candidate: nn.Module, scope: str) -> bool:
+    module_name = candidate.__class__.__module__
+    if scope == "all":
+        return True
+    if scope == "text":
+        return "modeling_bitnet" in module_name
+    if scope == "vision":
+        return "modeling_siglip" in module_name
+    raise ValueError(f"Unsupported BitLinear packing scope: {scope}")
+
+
 @torch.inference_mode()
-def pack_bitlinear_weights(module: nn.Module) -> PackingReport:
+def pack_bitlinear_weights(module: nn.Module, *, scope: str = "all") -> PackingReport:
     """Replace eligible BitLinear BF16 masters with their upstream uint8 2-bit buffers."""
     packed_layers = packed_weight_count = 0
     bf16_weight_bytes_replaced = packed_weight_bytes = 0
@@ -171,7 +183,12 @@ def pack_bitlinear_weights(module: nn.Module) -> PackingReport:
         quantize_weights = getattr(candidate, "quantize_weights", None)
         weight = getattr(candidate, "weight", None)
         weight_bits = int(getattr(candidate, "weight_bits", 1))
-        if not callable(quantize_weights) or not isinstance(weight, torch.Tensor) or weight_bits != 1:
+        if (
+            not callable(quantize_weights)
+            or not isinstance(weight, torch.Tensor)
+            or weight_bits != 1
+            or not _matches_scope(candidate, scope)
+        ):
             continue
 
         original_count = weight.numel()
@@ -193,6 +210,7 @@ def pack_bitlinear_weights(module: nn.Module) -> PackingReport:
     if packed_layers == 0:
         raise RuntimeError("No eligible one-bit BitLinear layers were found")
     return PackingReport(
+        scope=scope,
         packed_layers=packed_layers,
         packed_weight_count=packed_weight_count,
         bf16_weight_bytes_replaced=bf16_weight_bytes_replaced,

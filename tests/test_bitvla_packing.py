@@ -37,6 +37,7 @@ def test_pack_bitlinear_weights_replaces_only_one_bit_matrices() -> None:
     report = pack_bitlinear_weights(policy)
 
     assert report.packed_layers == 1
+    assert report.scope == "all"
     assert report.packed_weight_count == 15
     assert report.bf16_weight_bytes_replaced == 30
     assert report.packed_weight_bytes == 4
@@ -44,6 +45,16 @@ def test_pack_bitlinear_weights_replaces_only_one_bit_matrices() -> None:
     assert policy.ternary.weight is None
     assert policy.ternary.q_weight.dtype == torch.uint8
     assert policy.full_precision.weight is not None
+
+
+def test_pack_bitlinear_weights_validates_scope() -> None:
+    policy = FakePolicy()
+    try:
+        pack_bitlinear_weights(policy, scope="unknown")
+    except ValueError as error:
+        assert "Unsupported" in str(error)
+    else:
+        raise AssertionError("packing should reject an unknown scope")
 
 
 def test_pack_bitlinear_weights_rejects_models_without_eligible_layers() -> None:

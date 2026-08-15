@@ -158,7 +158,10 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     )
     packing = None
     if bool(config.get("packed_runtime", False)):
-        packing = pack_bitlinear_weights(model).to_dict()
+        packing = pack_bitlinear_weights(
+            model,
+            scope=str(config.get("packed_scope", "all")),
+        ).to_dict()
         packed_backend = str(config.get("packed_runtime_backend", "eager_unpack"))
         if packed_backend == "compiled_unpack":
             packing["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)

@@ -45,6 +45,11 @@ Stage P runs on four B200s. Stage M and F use the same four-rank topology so
 throughput comparisons are not confounded by hardware. Three seeds are promoted
 only after seed 0 passes its stage gate.
 
+The zero-action and action-only controls run on two A100-80GB ranks with doubled
+gradient accumulation, preserving the primary arm's global batch and optimizer
+step count. Their quality comparison is matched; systems comparisons remain
+within hardware and never compare raw A100 time against B200 time.
+
 ## Required ablations
 
 1. Released BitVLA, existing LIBERO-only action-only, BF16-world, and

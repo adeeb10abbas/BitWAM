@@ -4,7 +4,7 @@ upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_pretrain_to_libero_posttrain_no_midtrain
 seed: 0
-num_processes: 4
+num_processes: 2
 
 # Isolates frozen DROID world pretraining by omitting joint DROID Stage M.
 freeze_policy: false
@@ -34,7 +34,7 @@ use_lora: false
 num_images_in_input: 2
 use_proprio: true
 batch_size: 8
-grad_accumulation_steps: 4
+grad_accumulation_steps: 8
 learning_rate: 0.00001
 lr_vit: 0.0
 warmup_steps: 250

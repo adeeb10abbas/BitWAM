@@ -15,7 +15,7 @@ stage first learns the predictive task, a calibration stage converts the predict
 to absmean ternary matrix weights with per-token INT8 activations, and a final stage
 jointly optimizes action regression and prediction. A shuffled-action margin prevents
 the predictor from satisfying the objective through static scene similarity. The
-predictor is used only during training and adds no deployed policy latency. In a
+predictor is used only during training and adds no deployed module or memory cost. In a
 paired seed-0 LIBERO-10 evaluation with five rollouts per task, released BitVLA,
 matched action-only post-training, ternary-head BitWAM, and BF16-head BitWAM achieve
 39/50, 44/50, 45/50, and 47/50 success. Ternary BitWAM meets the predeclared 45/50
@@ -159,6 +159,14 @@ checkpoint and use the same examples, image augmentation, future offset, action
 horizon, global batch of 64, 2,000 update budget, learning-rate schedule, and ordered
 evaluation initial states. Training uses two NVIDIA B200 GPUs per run.
 
+For the systems profile, each saved policy is loaded in two independent processes on
+the same NVIDIA B200. After 20 warmup requests, we time 100 synchronized batch-one
+calls to the official action path using fixed seeded inputs. The timed scope includes
+input preprocessing and returns an eight-action chunk. We report CUDA allocation
+after load, peak allocation during a query, and only the files needed by that action
+path. We separately benchmark the training-only predictor at batch 8 with the world
+and shuffled-action contrastive forwards plus backward.
+
 The comparison matrix is:
 
 | Method | Policy updates | Predictive head | Auxiliary weight | Purpose |
@@ -225,13 +233,45 @@ At 2,000 joint updates, ternary BitWAM reaches future cosine 0.9445 and action g
 0.2146; BF16 reaches 0.9486 and 0.2449. Both complete 10/10 smoke rollouts, and the
 ternary method completes 45/50 in the seed-0 paired evaluation.
 
+### 5.4 Systems profile
+
+| Deployed policy | Mean p50 query | Mean p95 query | Loaded VRAM | Peak VRAM | Deploy files |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Released BitVLA | 109.58 ms | 115.52 ms | 5.433 GiB | 6.032 GiB | 5.403 GiB |
+| Action-only | 110.54 ms | 116.65 ms | 5.433 GiB | 6.032 GiB | 5.403 GiB |
+| BitWAM-Ternary | 108.69 ms | 114.93 ms | 5.433 GiB | 6.032 GiB | 5.403 GiB |
+| BitWAM-BF16 | 109.30 ms | 117.90 ms | 5.433 GiB | 6.032 GiB | 5.403 GiB |
+
+All methods have exactly the same deployed parameter count, tensor storage, CUDA
+allocation, query peak, and action graph. Ternary BitWAM's measured p50 is 0.82%
+below released BitVLA, but the predictor is not executed and the small difference is
+not attributable to BitWAM. The systems result is zero added deployment cost, not a
+speedup. The 21.05 MiB predictor checkpoint is excluded from the 5.403 GiB deploy
+set.
+
+The isolated BF16 and ternary-QAT predictors both store 21.046 MiB of BF16
+parameters. Across two runs, BF16 p50 remains 3.289–3.300 ms, whereas ternary-QAT
+p50 ranges from 3.357–9.498 ms and uses 131.344 MiB peak allocation versus 81.825
+MiB. On-the-fly quantization therefore provides no realized systems improvement. A
+simple packed two-bit representation would reduce total predictor storage to about
+2.647 MiB (87.42%), but no packed checkpoint or kernel is implemented.
+
+End-to-end log time for 2,000 updates is 73.26 minutes for action-only, 73.30 minutes
+for ternary BitWAM, and 72.90 minutes for BF16 BitWAM, including process startup and
+final checkpoint save on two B200s. The world-head jobs overlapped on different GPU
+pairs in one pod, so the sub-percent ordering is not interpreted as a throughput
+difference. No full-training allocator trace was archived; only the isolated-head
+memory comparison is reported.
+
 ## 6. Limitations and claim boundaries
 
 The current evidence is limited to simulation, one training seed, and five rollouts
 per task. The auxiliary objective predicts a visual representation, not full physical
 state, and the shuffled-action negative tests dependence rather than causal
 correctness. Results on one released controller do not establish generality across
-VLA families. We therefore avoid “first 1-bit world-action model” and control
+VLA families. The ternary predictor currently simulates quantization with BF16
+master weights; theoretical packed size must not be presented as measured memory or
+speed. We therefore avoid “first 1-bit world-action model” and control
 improvement claims unless the related-work audit and paired multi-seed results
 support them.
 

@@ -33,3 +33,8 @@ Per-task successes out of five, in evaluator order:
 | BF16 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 5 | 2 | 5 |
 
 This is a single training seed and must not be presented as the final paper matrix.
+
+The matched B200 latency, VRAM, deploy-size, and auxiliary-head measurements are in
+[`PERFORMANCE.md`](PERFORMANCE.md). They establish identical deployment memory and
+no attributable inference speedup: BitWAM removes its predictor from the action
+path. The current on-the-fly ternary head is a QAT simulation, not a packed runtime.

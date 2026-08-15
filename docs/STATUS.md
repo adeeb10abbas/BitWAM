@@ -38,8 +38,18 @@ BitWAM 47/50. Ternary BitWAM therefore meets the 45/50 gate, but its +2-point pa
 difference over action-only has bootstrap 95% interval `[-8,+12]` and exact McNemar
 p=1.0. It is a functioning result, not yet a control-improvement result.
 
-The current local check result is `60 passed, 1 skipped`; the skip is CUDA-only on
+The current local check result is `63 passed, 1 skipped`; the skip is CUDA-only on
 the macOS host. The Python linter passes.
+
+The systems profile is also complete for seed 0. Two independent B200 runs per
+policy measured 108.69–110.54 ms mean p50 request latency across the four methods.
+All four have exactly 5.433 GiB allocated after load and 6.032 GiB peak allocation
+during a query because the world predictor is not loaded. The current ternary-QAT
+head retains the same 21.046 MiB BF16 parameter storage as the BF16 head and has
+higher temporary allocation, so no realized compression or speed claim is made.
+The three matched 2,000-update job logs span 72.90–73.30 minutes from launcher start
+through final save, with no material wall-clock separation. Full-training peak CUDA
+allocation was not archived and is not inferred from informal monitoring.
 
 ## Historical local VLA-JEPA track
 
@@ -117,8 +127,9 @@ evaluation schedule, stop rules, and plain-language report format, see
 - Repeat action-only, BF16-head, and ternary-head post-training for seeds 1 and 2.
 - Run the preregistered 50 rollouts per task with paired initial states after all
   training seeds are available.
-- Measure packed ternary storage, peak VRAM, training cost, and deployed inference
-  latency.
+- Implement and measure a packed ternary predictor only if predictor checkpoint
+  compression is a paper goal; current theoretical size is clearly separated from
+  realized storage and runtime.
 - Replace pending paper cells with archived multi-seed metrics and confidence
   intervals.
 

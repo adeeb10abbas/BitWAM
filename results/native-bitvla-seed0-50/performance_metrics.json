@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "hardware": {
+    "gpu": "NVIDIA B200",
+    "compute_capability": "10.0",
+    "torch": "2.9.1+cu128",
+    "cuda": "12.8"
+  },
+  "policy_protocol": {
+    "independent_process_runs": 2,
+    "batch_size": 1,
+    "action_chunk_size": 8,
+    "warmup_queries_per_run": 20,
+    "timed_queries_per_run": 100,
+    "timing_scope": "official get_action including preprocessing and synchronized CUDA inference",
+    "input": "fixed seed-0 224x224 RGB main/wrist images and zero proprioception"
+  },
+  "policy_results": {
+    "released": {
+      "mean_p50_ms": 109.5815785,
+      "p50_run_range_ms": [109.2609415, 109.9022155],
+      "mean_p95_ms": 115.516722,
+      "mean_latency_ms": 110.30701111
+    },
+    "action_only": {
+      "mean_p50_ms": 110.54390925,
+      "p50_run_range_ms": [109.6065395, 111.481279],
+      "mean_p95_ms": 116.651107725,
+      "mean_latency_ms": 111.574173015
+    },
+    "bitwam_ternary": {
+      "mean_p50_ms": 108.68571125,
+      "p50_run_range_ms": [108.609521, 108.7619015],
+      "mean_p95_ms": 114.933336575,
+      "mean_latency_ms": 109.54260715
+    },
+    "bitwam_bf16": {
+      "mean_p50_ms": 109.30087225,
+      "p50_run_range_ms": [109.038241, 109.5635035],
+      "mean_p95_ms": 117.895767775,
+      "mean_latency_ms": 110.59266113
+    }
+  },
+  "policy_common_storage_and_memory": {
+    "parameter_count": 2885187751,
+    "parameter_bytes": 5770375502,
+    "buffer_bytes": 62924288,
+    "cuda_allocated_after_load_bytes": 5833370624,
+    "cuda_reserved_after_load_bytes": 5960105984,
+    "cuda_peak_allocated_during_query_bytes": 6476575744,
+    "cuda_peak_query_increment_bytes": 643205120,
+    "deployment_bytes": 5801049511,
+    "released_deployment_bytes": 5801048941
+  },
+  "training_log_wall_clock": {
+    "scope": "torchrun start through process exit, including startup and final checkpoint save",
+    "updates": 2000,
+    "global_batch_size": 64,
+    "gpus_per_run": 2,
+    "action_only_seconds": 4395.441,
+    "bitwam_ternary_seconds": 4397.848,
+    "bitwam_bf16_seconds": 4374.283,
+    "caveat": "The ternary and BF16 jobs overlapped on separate GPU pairs in the same pod; the action-only job ran earlier. No full-training peak allocator trace was archived."
+  },
+  "world_head_protocol": {
+    "independent_process_runs": 2,
+    "batch_size": 8,
+    "latent_dim": 2560,
+    "action_tokens": 8,
+    "timing_scope": "world and shuffled-action contrastive forward/backward, optimizer excluded"
+  },
+  "world_head_results": {
+    "bf16": {
+      "p50_run_range_ms": [3.28881, 3.299789],
+      "p95_run_range_ms": [4.0068284, 6.3695702],
+      "mean_latency_across_runs_ms": 3.34875676,
+      "parameter_bytes": 22068736,
+      "cuda_allocated_after_warmup_bytes": 62595072,
+      "cuda_peak_allocated_during_step_bytes": 85799424,
+      "cuda_peak_step_increment_bytes": 23204352
+    },
+    "ternary_qat": {
+      "p50_run_range_ms": [3.356682, 9.4984125],
+      "p95_run_range_ms": [8.1565145, 10.88836965],
+      "mean_latency_across_runs_ms": 6.552641485,
+      "parameter_bytes": 22068736,
+      "cuda_allocated_after_warmup_bytes": 62595072,
+      "cuda_peak_allocated_during_step_bytes": 137724416,
+      "cuda_peak_step_increment_bytes": 75129344
+    }
+  },
+  "world_head_packing": {
+    "eligible_matrix_weights": 11024384,
+    "current_checkpoint_bytes": 22072975,
+    "current_parameter_bytes": 22068736,
+    "theoretical_total_bytes_with_two_bit_matrices": 2776064,
+    "theoretical_total_bytes_with_entropy_coded_matrices": 2204123,
+    "theoretical_two_bit_reduction_fraction": 0.8742,
+    "theoretical_entropy_coded_reduction_fraction": 0.9001,
+    "packed_kernel_implemented": false
+  },
+  "conclusion": {
+    "deployment_speedup_demonstrated": false,
+    "deployment_memory_reduction_demonstrated": false,
+    "reason": "The training-only predictor is not loaded by deployment and all four policies have an identical action graph and memory footprint. The observed sub-one-percent ternary p50 difference is not attributed to the method.",
+    "realized_world_head_speedup_demonstrated": false,
+    "realized_world_head_memory_reduction_demonstrated": false
+  }
+}

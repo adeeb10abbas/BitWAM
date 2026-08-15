@@ -109,6 +109,14 @@ the predictor learned action-dependent dynamics rather than scene similarity.
   the paired seed-0 evaluation. Action-only scored 44/50 and BF16-head BitWAM 47/50.
 - The ternary-versus-action-only difference is +2 points with paired bootstrap 95%
   interval `[-8,+12]`; this does not support an improvement claim.
+- Two independent B200 profiles per policy find the same 5.433 GiB loaded
+  allocation and 6.032 GiB query peak for all four action paths. Mean p50 latency is
+  108.69–110.54 ms across methods; the unchanged graph supports a zero-overhead
+  result, not a BitWAM speedup.
+- The current ternary head retains 21.046 MiB of BF16 parameters, is slower and more
+  memory-intensive than the BF16 head during isolated training steps, and therefore
+  is not a packed-runtime result. Simple two-bit packing would theoretically reduce
+  the complete head to 2.647 MiB, but this remains unimplemented.
 
 These observations establish that the method works in closed loop, but do not yet
 establish a control benefit over action-only across training seeds.

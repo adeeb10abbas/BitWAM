@@ -1,14 +1,14 @@
 architecture: bitvla
-config_revision: 821b1bf
+config_revision: 758dabf
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_frozen_world_pretrain_zero_action
 seed: 0
-num_processes: 2
+num_processes: 1
 rlds_split: train[:99%]
 
 # Matched visual-only control. The update count and global batch match Stage P;
-# two A100 ranks use twice the accumulation of the four-B200 primary run.
+# one A100 rank uses four times the accumulation of the four-B200 primary run.
 freeze_policy: true
 world_loss_weight: 1.0
 world_learning_rate: 0.0001
@@ -35,7 +35,7 @@ use_lora: false
 num_images_in_input: 2
 use_proprio: false
 batch_size: 8
-grad_accumulation_steps: 16
+grad_accumulation_steps: 32
 learning_rate: 0.000005
 lr_vit: 0.0
 warmup_steps: 500

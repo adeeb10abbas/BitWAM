@@ -1,5 +1,5 @@
 architecture: bitvla
-config_revision: 821b1bf
+config_revision: 758dabf
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_pretrain_to_libero_posttrain_no_midtrain
@@ -33,8 +33,8 @@ use_l1_regression: true
 use_lora: false
 num_images_in_input: 2
 use_proprio: true
-batch_size: 8
-grad_accumulation_steps: 8
+batch_size: 4
+grad_accumulation_steps: 16
 learning_rate: 0.00001
 lr_vit: 0.0
 warmup_steps: 250

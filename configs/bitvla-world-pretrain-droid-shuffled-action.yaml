@@ -1,10 +1,10 @@
 architecture: bitvla
-config_revision: 821b1bf
+config_revision: 758dabf
 upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 stage: droid_frozen_world_pretrain_shuffled_action
 seed: 0
-num_processes: 2
+num_processes: 1
 rlds_split: train[:99%]
 
 # Matched action-misalignment control. The per-example action chunks are rolled
@@ -36,7 +36,7 @@ use_lora: false
 num_images_in_input: 2
 use_proprio: false
 batch_size: 8
-grad_accumulation_steps: 16
+grad_accumulation_steps: 32
 learning_rate: 0.000005
 lr_vit: 0.0
 warmup_steps: 500

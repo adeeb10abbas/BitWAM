@@ -10,7 +10,8 @@ readonly PYTHON_ROOT="${BITVLA_ROOT:-/data/users/ali/BitVLA}"
 readonly RUN_ROOT="${BITWAM_RUN_ROOT:-/data/users/ali/bitvla_runs}"
 readonly EVAL_ROOT="${BITWAM_EVAL_ROOT:-/data/users/ali/bitvla_evals}"
 readonly LOG_ROOT="${BITWAM_LOG_ROOT:-/data/users/ali/logs}"
-readonly CONFIG_REVISION="${BITWAM_CONFIG_REVISION:-821b1bf}"
+readonly PRIMARY_CONFIG_REVISION="${BITWAM_PRIMARY_CONFIG_REVISION:-821b1bf}"
+readonly DOWNSTREAM_CONFIG_REVISION="${BITWAM_DOWNSTREAM_CONFIG_REVISION:-758dabf}"
 readonly PRIMARY_PID_FILE="${BITWAM_PRIMARY_PID_FILE:-${LOG_ROOT}/bitvla-droid-pretrain-after-smoke.pid}"
 readonly PRIMARY_CHECKPOINT="${RUN_ROOT}/bitwam-droid-pretrain--120000_chkpt"
 readonly PIPELINE_SUMMARY="${RUN_ROOT}/bitwam-droid-study-summary.json"
@@ -62,8 +63,9 @@ validate_checkpoint() {
   local checkpoint="$1"
   local expected_stage="$2"
   local expected_step="$3"
+  local expected_revision="$4"
   "${PYTHON_ROOT}/.venv/bin/python" - "${checkpoint}" "${expected_stage}" \
-    "${expected_step}" "${CONFIG_REVISION}" <<'PY'
+    "${expected_step}" "${expected_revision}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -173,7 +175,9 @@ run_training_stage() {
   printf '%s\n' "${pid}" >"${pid_file}"
   wait "${pid}"
   wait_for_checkpoint "${checkpoint}" "${pid_file}" "${label}"
-  validate_checkpoint "${checkpoint}" "${expected_stage}" "${expected_step}"
+  validate_checkpoint \
+    "${checkpoint}" "${expected_stage}" "${expected_step}" \
+    "${DOWNSTREAM_CONFIG_REVISION}"
   validate_metrics "${run_dir}/metrics.jsonl" "${processes}"
   log "completed ${label}"
 }
@@ -252,7 +256,8 @@ main() {
   wait_for_checkpoint "${PRIMARY_CHECKPOINT}" "${PRIMARY_PID_FILE}" "Stage P"
   wait_for_process_exit "${PRIMARY_PID_FILE}" "Stage P"
   validate_checkpoint \
-    "${PRIMARY_CHECKPOINT}" droid_frozen_world_pretrain 120000
+    "${PRIMARY_CHECKPOINT}" droid_frozen_world_pretrain 120000 \
+    "${PRIMARY_CONFIG_REVISION}"
   validate_metrics "${RUN_ROOT}/bitwam-droid-pretrain/metrics.jsonl" 4
 
   run_holdout \

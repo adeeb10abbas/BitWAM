@@ -52,9 +52,14 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
     assert "--num_processes" not in argv
 
 
-def test_runtime_config_requires_positive_world_loss(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="must be positive"):
-        parse_runtime_config(_config(tmp_path) | {"world_loss_weight": 0})
+def test_runtime_config_allows_zero_weight_for_action_only_ablation(tmp_path: Path) -> None:
+    runtime = parse_runtime_config(_config(tmp_path) | {"world_loss_weight": 0})
+    assert runtime.world_loss_weight == 0
+
+
+def test_runtime_config_rejects_negative_world_loss(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="non-negative"):
+        parse_runtime_config(_config(tmp_path) | {"world_loss_weight": -0.1})
 
 
 def test_runtime_config_rejects_unknown_world_head_precision(tmp_path: Path) -> None:

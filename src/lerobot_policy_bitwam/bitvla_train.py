@@ -98,8 +98,8 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     if not (upstream_root / "openvla-oft/vla-scripts/finetune_bitnet.py").is_file():
         raise ValueError(f"BitVLA upstream checkout is incomplete: {upstream_root}")
     weight = float(config.get("world_loss_weight", 0.1))
-    if weight <= 0:
-        raise ValueError("world_loss_weight must be positive for BitVLA WAM training")
+    if weight < 0:
+        raise ValueError("world_loss_weight must be non-negative for BitVLA WAM training")
     world_checkpoint = config.get("world_checkpoint")
     optimizer_checkpoint = config.get("optimizer_checkpoint")
     metrics_path = config.get("metrics_path")

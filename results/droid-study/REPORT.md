@@ -61,8 +61,8 @@ official-RLDS holdout, so their success counts are not pooled with BitWAM.
 
 | Model | Class/interface | Valid success | Directional detail | Evidence SHA-256 |
 | --- | --- | ---: | --- | --- |
-| Cosmos3 Edge Policy DROID | WAM; 32 actions + 33 decoded frames | 6/6 | left 3/3, right 3/3 | `1c559ee5667ac9d22d7b66eafa7a65551783eedaf7fb3de29a2faf450c2dd029` |
-| Cosmos3 Nano Policy DROID | WAM; 32 actions + 33 decoded frames | 6/6 | left 3/3, right 3/3 | `4a6cc1d61593c7ba5272e1707f6bbe51261f7d23438070992bd75fd9e95fdb93` |
+| [Cosmos3 Edge Policy DROID](https://huggingface.co/nvidia/Cosmos3-Edge-Policy-DROID) | WAM; 32 actions + 33 decoded frames | 6/6 | left 3/3, right 3/3 | `1c559ee5667ac9d22d7b66eafa7a65551783eedaf7fb3de29a2faf450c2dd029` |
+| [Cosmos3 Nano Policy DROID](https://huggingface.co/nvidia/Cosmos3-Nano-Policy-DROID) | WAM; 32 actions + 33 decoded frames | 6/6 | left 3/3, right 3/3 | `4a6cc1d61593c7ba5272e1707f6bbe51261f7d23438070992bd75fd9e95fdb93` |
 | Cosmos3 Nano, guidance 1 | WAM guidance ablation | 4/6 | left 1/3, right 3/3 | `8796f4ab9ea9490ee5b78678bc689d6fd13f27a9551006f8b5d346e202d0cc5c` |
 | DreamZero DROID | joint action/latent-video | 3/6 | left 2/3, right 1/3 | `4c76cdc3ca9eaf227d21d160199408f22e1b3dd7a71176a5a5dbe22223714461` |
 | GR00T N1.7 DROID | VLA | 0/6 | pickup/interaction 3/3 each direction | `95077a42bb0115bc673ea13ae5acdc6fdef6f476627804662f73c219ebd88bc7` |
@@ -75,14 +75,17 @@ training and discards the auxiliary head for control deployment, whereas Cosmos
 emits decoded video, so the two latency scopes remain separate.
 
 Cosmos policy checkpoints also use their native action representation and
-runtime. NVIDIA's DROID recipe predicts eight-dimensional absolute joint actions;
-BitWAM uses BitVLA's seven-dimensional base-frame delta transform. Action L1 is
-therefore reported within each representation, never directly across them.
+runtime. [NVIDIA's DROID recipe](https://github.com/NVIDIA/cosmos-framework/blob/main/docs/action_policy_droid_posttrain.md)
+predicts eight-dimensional absolute joint actions; BitWAM uses BitVLA's
+seven-dimensional base-frame delta transform. Action L1 is therefore reported
+within each representation, never directly across them.
 
-The current official TensorRT-LLM Cosmos3 recipe covers audiovisual generation,
-not the DROID action-policy path. Cosmos action measurements are labeled as
-Cosmos Framework or vLLM-Omni unless an action-capable TensorRT engine is actually
-validated. No framework label is inferred from checkpoint format alone.
+The current official [Cosmos inference documentation](https://github.com/NVIDIA/cosmos-framework/blob/main/docs/inference.md)
+and [TensorRT-LLM cookbook](https://github.com/NVIDIA/cosmos/blob/main/cookbooks/cosmos3/README.md)
+cover TensorRT audiovisual generation, not the DROID action-policy path. Cosmos
+action measurements are labeled as Cosmos Framework or vLLM-Omni unless an
+action-capable TensorRT engine is actually validated. No framework label is
+inferred from checkpoint format alone.
 
 ## Existing deployment reference
 

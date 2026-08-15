@@ -3,6 +3,13 @@
 BitWAM is a LeRobot policy plugin for measuring how ternary compression affects
 VLA-JEPA action generation and world-model supervision.
 
+The native BitVLA path also includes a quality-gated packed runtime. The recommended
+mode packs the ternary text backbone into four two-bit codes per byte, preserves
+bit-exact actions and 10/10 ordered LIBERO smoke success, and reduces measured B200
+resident CUDA allocation by 62.08%. See
+[`PACKED_RUNTIME.md`](results/native-bitvla-seed0-50/PACKED_RUNTIME.md) for the full
+memory, latency, and ablation results.
+
 The implementation follows [`docs/EXECUTION_PLAN.md`](docs/EXECUTION_PLAN.md).
 The research claims and matched ablations are defined in
 [`docs/PAPER_PLAN.md`](docs/PAPER_PLAN.md).
@@ -32,6 +39,13 @@ uv run bitwam evaluate --config configs/pilot.yaml
 uv run bitwam export --config configs/pilot.yaml       # Phase 5
 uv run bitwam benchmark --config configs/pilot.yaml    # Phase 5
 uv run bitwam summarize --config configs/final_matrix.yaml
+```
+
+For the selected native BitVLA packed runtime:
+
+```bash
+uv run bitwam benchmark --config configs/bitvla-world-ternary-packed-text-benchmark.yaml
+uv run bitwam evaluate --config configs/bitvla-world-ternary-packed-text-eval-10.yaml
 ```
 
 Training writes its PID, exact command, status JSON, and append-only log beside

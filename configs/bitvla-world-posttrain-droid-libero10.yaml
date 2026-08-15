@@ -1,0 +1,50 @@
+architecture: bitvla
+config_revision: 8e05700
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+stage: droid_to_libero_joint_posttrain
+seed: 0
+num_processes: 4
+
+# Stage F: transfer the DROID-adapted backbone/action head and world head to
+# LIBERO, restore the exact released LIBERO proprio projector, and calibrate
+# the world head to ternary weights during closed-loop task adaptation.
+freeze_policy: false
+world_loss_weight: 0.1
+world_contrastive_weight: 1.0
+world_contrastive_margin: 0.05
+world_learning_rate: 0.0001
+world_hidden_dim: 2048
+world_action_embedding_dim: 256
+world_head_precision: ternary
+world_checkpoint: /data/users/ali/bitvla_runs/bitwam-droid-midtrain--105000_chkpt/world_model--105000_checkpoint.pt
+proprio_checkpoint: /data/users/ali/bitvla_models/ft-libero-long/proprio_projector--100000_checkpoint.pt
+save_backbone: true
+metrics_path: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain/metrics.jsonl
+
+output_dir: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain
+run_id: bitvla-world-posttrain-droid-libero10-seed0
+
+vla_path: /data/users/ali/bitvla_runs/bitwam-droid-midtrain--105000_chkpt
+data_root_dir: /data/users/ali/bitvla_data/modified_libero_rlds
+dataset_name: libero_10_no_noops
+run_root_dir: /data/users/ali/bitvla_runs
+run_id_override: bitwam-droid-libero-posttrain
+resume: true
+resume_step: 105000
+use_l1_regression: true
+use_lora: false
+num_images_in_input: 2
+use_proprio: true
+batch_size: 8
+grad_accumulation_steps: 4
+learning_rate: 0.00001
+lr_vit: 0.0
+warmup_steps: 250
+max_steps: 107000
+save_freq: 1000
+save_latest_checkpoint_only: false
+shuffle_buffer_size: 10000
+image_aug: true
+wandb_log_freq: 10
+use_wandb: false

@@ -1,0 +1,47 @@
+architecture: bitvla
+config_revision: 8e05700
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+stage: droid_frozen_world_pretrain
+seed: 0
+num_processes: 4
+
+# Stage P: fit an action-conditioned future-latent head while preserving the
+# released BitVLA controller. Global effective batch = 4 * 8 * 8 = 256.
+freeze_policy: true
+world_loss_weight: 1.0
+world_learning_rate: 0.0001
+world_hidden_dim: 2048
+world_action_embedding_dim: 256
+world_head_precision: bf16
+world_contrastive_weight: 0.0
+world_contrastive_margin: 0.05
+save_backbone: false
+metrics_path: /data/users/ali/bitvla_runs/bitwam-droid-pretrain/metrics.jsonl
+
+output_dir: /data/users/ali/bitvla_runs/bitwam-droid-pretrain
+run_id: bitvla-world-pretrain-droid-seed0
+
+vla_path: /data/users/ali/bitvla_models/ft-libero-long
+data_root_dir: /data/users/ali/bitvla_data/droid_rlds
+dataset_name: droid
+run_root_dir: /data/users/ali/bitvla_runs
+run_id_override: bitwam-droid-pretrain
+resume: true
+resume_step: 100000
+use_l1_regression: true
+use_lora: false
+num_images_in_input: 2
+use_proprio: false
+batch_size: 8
+grad_accumulation_steps: 8
+learning_rate: 0.000005
+lr_vit: 0.0
+warmup_steps: 500
+max_steps: 120000
+save_freq: 5000
+save_latest_checkpoint_only: false
+shuffle_buffer_size: 100000
+image_aug: true
+wandb_log_freq: 10
+use_wandb: false

@@ -1,0 +1,16 @@
+architecture: bitvla
+config_revision: 8c3f444
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+checkpoint: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain--107000_chkpt
+output_dir: /data/users/ali/bitvla_benchmarks/droid/replicate/packed-text/world-ternary
+run_id: bitwam-droid-libero-107000-packed-text-replicate
+task_suite_name: libero_10
+seed: 0
+benchmark_target: policy
+packed_runtime: true
+packed_scope: text
+packed_runtime_backend: compiled_unpack
+validate_packed_output: true
+benchmark_warmup_iterations: 20
+benchmark_iterations: 100

@@ -9,5 +9,6 @@ seed: 0
 benchmark_target: policy
 packed_runtime: true
 packed_runtime_backend: compiled_unpack
+validate_packed_output: true
 benchmark_warmup_iterations: 5
 benchmark_iterations: 20

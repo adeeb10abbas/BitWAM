@@ -187,9 +187,11 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     packing = None
     correctness = None
     dense_actions = None
+    dense_repeat_actions = None
     if bool(config.get("packed_runtime", False)):
         if bool(config.get("validate_packed_output", False)):
             dense_actions = query()
+            dense_repeat_actions = query()
         packing = pack_bitlinear_weights(
             model,
             scope=str(config.get("packed_scope", "all")),
@@ -207,8 +209,13 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
         if dense_actions is not None:
             packed_actions = query()
             difference = np.abs(packed_actions.astype(np.float64) - dense_actions.astype(np.float64))
+            dense_repeat_difference = np.abs(
+                dense_repeat_actions.astype(np.float64) - dense_actions.astype(np.float64)
+            )
             correctness = {
                 "shape": list(dense_actions.shape),
+                "dense_repeat_exact_match": bool(np.array_equal(dense_repeat_actions, dense_actions)),
+                "dense_repeat_max_absolute_error": float(dense_repeat_difference.max(initial=0)),
                 "exact_match": bool(np.array_equal(packed_actions, dense_actions)),
                 "allclose_atol_1e-4": bool(np.allclose(packed_actions, dense_actions, rtol=1e-4, atol=1e-4)),
                 "max_absolute_error": float(difference.max(initial=0)),

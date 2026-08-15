@@ -155,8 +155,41 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     free_before, _ = torch.cuda.mem_get_info()
     load_started = time.perf_counter()
     model, action_head, proprio_projector, noisy_action_projector, processor = evaluator.initialize_model(cfg)
+    model.set_constant(
+        image_token_idx=evaluator.BITNET_DEFAULT_IMAGE_TOKEN_IDX,
+        proprio_pad_idx=evaluator.BITNET_PROPRIO_PAD_IDX,
+        ignore_idx=evaluator.BITNET_IGNORE_INDEX,
+        action_token_begin_idx=evaluator.BITNET_ACTION_TOKEN_BEGIN_IDX,
+        stop_index=evaluator.BITNET_STOP_INDEX,
+    )
+    rng = np.random.default_rng(int(config.get("seed", 0)))
+    images = (
+        rng.integers(0, 256, size=(224, 224, 3), dtype=np.uint8),
+        rng.integers(0, 256, size=(224, 224, 3), dtype=np.uint8),
+    )
+    state = np.zeros(8, dtype=np.float32)
+    task_label = str(config.get("benchmark_task_label", "put the black bowl on the plate"))
+
+    def query() -> np.ndarray:
+        actions = evaluator.get_action(
+            cfg,
+            model,
+            _fresh_observation(images, state),
+            task_label,
+            processor=processor,
+            action_head=action_head,
+            proprio_projector=proprio_projector,
+            noisy_action_projector=noisy_action_projector,
+            use_film=cfg.use_film,
+        )
+        return np.asarray(actions)
+
     packing = None
+    correctness = None
+    dense_actions = None
     if bool(config.get("packed_runtime", False)):
+        if bool(config.get("validate_packed_output", False)):
+            dense_actions = query()
         packing = pack_bitlinear_weights(
             model,
             scope=str(config.get("packed_scope", "all")),
@@ -171,42 +204,25 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
         elif packed_backend != "eager_unpack":
             raise ValueError(f"Unsupported packed_runtime_backend: {packed_backend}")
         packing["backend"] = packed_backend
+        if dense_actions is not None:
+            packed_actions = query()
+            difference = np.abs(packed_actions.astype(np.float64) - dense_actions.astype(np.float64))
+            correctness = {
+                "shape": list(dense_actions.shape),
+                "exact_match": bool(np.array_equal(packed_actions, dense_actions)),
+                "allclose_atol_1e-4": bool(np.allclose(packed_actions, dense_actions, rtol=1e-4, atol=1e-4)),
+                "max_absolute_error": float(difference.max(initial=0)),
+                "mean_absolute_error": float(difference.mean()),
+            }
         gc.collect()
         torch.cuda.empty_cache()
-    model.set_constant(
-        image_token_idx=evaluator.BITNET_DEFAULT_IMAGE_TOKEN_IDX,
-        proprio_pad_idx=evaluator.BITNET_PROPRIO_PAD_IDX,
-        ignore_idx=evaluator.BITNET_IGNORE_INDEX,
-        action_token_begin_idx=evaluator.BITNET_ACTION_TOKEN_BEGIN_IDX,
-        stop_index=evaluator.BITNET_STOP_INDEX,
-    )
+
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - load_started
     free_after_load, _ = torch.cuda.mem_get_info()
     allocated_after_load = torch.cuda.memory_allocated()
     reserved_after_load = torch.cuda.memory_reserved()
     load_peak_allocated = torch.cuda.max_memory_allocated()
-
-    rng = np.random.default_rng(int(config.get("seed", 0)))
-    images = (
-        rng.integers(0, 256, size=(224, 224, 3), dtype=np.uint8),
-        rng.integers(0, 256, size=(224, 224, 3), dtype=np.uint8),
-    )
-    state = np.zeros(8, dtype=np.float32)
-    task_label = str(config.get("benchmark_task_label", "put the black bowl on the plate"))
-
-    def query() -> None:
-        evaluator.get_action(
-            cfg,
-            model,
-            _fresh_observation(images, state),
-            task_label,
-            processor=processor,
-            action_head=action_head,
-            proprio_projector=proprio_projector,
-            noisy_action_projector=noisy_action_projector,
-            use_film=cfg.use_film,
-        )
 
     for _ in range(warmup):
         query()
@@ -244,6 +260,7 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
             "packed_runtime": packing is not None,
         },
         "packing": packing,
+        "correctness": correctness,
         "load_seconds": load_seconds,
         "latency": latency,
         "latency_samples_ms": latencies_ms,

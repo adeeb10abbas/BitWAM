@@ -30,9 +30,16 @@ stage definitions are preregistered in `docs/DROID_STUDY.md`.
 | --- | --- | --- |
 | DROID-100 object integrity | 33 objects; 2,192,615,094 bytes; per-object MD5 | passed |
 | DROID-100 schema/gradient | two optimizer steps on one B200 | passed |
-| Full DROID 1.0.1 object integrity | 2,050 objects; 2,048 TFRecord shards; 95,658 episodes; per-object size and MD5 | running |
-| Full train statistics | deterministic `train[:99%]`, cache keyed by split | pending full transfer |
+| Full DROID 1.0.1 object integrity | 2,050 objects; 1,865,994,705,042 bytes; 2,048 TFRecord shards; 95,658 episodes; per-object size and MD5 | passed |
+| Full train statistics | deterministic `train[:99%]`, cache keyed by split | running |
 | Full-release gradient | two optimizer steps on one B200 | pending statistics |
+
+The full-release manifest is archived as
+`results/droid-study/droid-full-download-manifest.json` with SHA-256
+`28752e02f3f2b5a66520c982dee58ae5e2ac41db6e2c4c3e4cf9759e52bea65d`.
+Its nine `downloaded` objects were recovered full-size partials that passed the
+same GCS MD5 check before atomic promotion; the other 2,041 objects were read
+and reverified from their final paths. No partial files remain.
 
 The DROID-100 run produced finite losses and a checkpoint, but it is an
 initialization smoke and not a quality result. Its archived action L1 was
@@ -79,6 +86,17 @@ runtime. [NVIDIA's DROID recipe](https://github.com/NVIDIA/cosmos-framework/blob
 predicts eight-dimensional absolute joint actions; BitWAM uses BitVLA's
 seven-dimensional base-frame delta transform. Action L1 is therefore reported
 within each representation, never directly across them.
+
+That eight-dimensional contract is specific to the current Nano DROID recipe,
+not a blanket Cosmos interface. A separate pinned local `nvidia/Cosmos3-Edge`
+base artifact at checkpoint revision
+`ff48d22144de52de296a7b4d3a78914831007212` returned 16 × 10 BF16 actions
+and a 17-frame future; its exact action array SHA-256 is
+`4f1ae07c4a1273a6fde5f3fbd0888022db35283d4ecbea1a3233d035963fb571`.
+It is not substituted for the Edge-Policy-DROID row. The sealed Nano artifact
+returned 32 × 8 FP32 actions. Results therefore retain the checkpoint revision,
+chunk length, action dimension, dtype, and output scope rather than pooling
+checkpoints under one “Cosmos DROID” contract.
 
 The current official [Cosmos inference documentation](https://github.com/NVIDIA/cosmos-framework/blob/main/docs/inference.md)
 and [TensorRT-LLM cookbook](https://github.com/NVIDIA/cosmos/blob/main/cookbooks/cosmos3/README.md)

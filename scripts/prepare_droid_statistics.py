@@ -18,6 +18,18 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--split", default="train[:99%]")
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--num-parallel-reads",
+        type=int,
+        default=16,
+        help="Maximum concurrent RLDS file readers (default: 16).",
+    )
+    parser.add_argument(
+        "--num-parallel-calls",
+        type=int,
+        default=16,
+        help="Maximum concurrent trajectory-map calls (default: 16).",
+    )
     return parser
 
 
@@ -29,10 +41,19 @@ def _json_default(value):
     raise TypeError(f"Cannot serialize {type(value).__name__}")
 
 
+def _bounded_parallelism(requested: int | None, limit: int) -> int:
+    """Replace AUTOTUNE and cap explicit tf.data parallelism for full DROID."""
+    if requested is None or requested < 1:
+        return limit
+    return min(requested, limit)
+
+
 def main() -> int:
     args = build_parser().parse_args()
     if not re.fullmatch(r"train(?:\[\d*%?:\d*%?\])?", args.split):
         raise SystemExit("split must be a deterministic slice of the train split")
+    if args.num_parallel_reads < 1 or args.num_parallel_calls < 1:
+        raise SystemExit("parallel read and call limits must be positive")
     upstream_root = args.upstream_root.expanduser().resolve()
     openvla_root = upstream_root / "openvla-oft"
     if not (openvla_root / "prismatic/vla/datasets/datasets.py").is_file():
@@ -43,7 +64,8 @@ def main() -> int:
 
     import dlimp as dl
 
-    original = dl.DLataset.from_rlds
+    original_from_rlds = dl.DLataset.from_rlds
+    original_traj_map = dl.DLataset.traj_map
 
     def from_rlds(builder, split="train", shuffle=True, num_parallel_reads=-1):
         builder_name = str(getattr(builder, "name", "")).lower()
@@ -52,14 +74,28 @@ def main() -> int:
             "train",
         }:
             split = args.split
-        return original(
+        return original_from_rlds(
             builder,
             split=split,
             shuffle=shuffle,
-            num_parallel_reads=num_parallel_reads,
+            num_parallel_reads=_bounded_parallelism(
+                num_parallel_reads, args.num_parallel_reads
+            ),
         )
 
     dl.DLataset.from_rlds = staticmethod(from_rlds)
+
+    def traj_map(self, fn, num_parallel_calls=-1, **kwargs):
+        return original_traj_map(
+            self,
+            fn,
+            num_parallel_calls=_bounded_parallelism(
+                num_parallel_calls, args.num_parallel_calls
+            ),
+            **kwargs,
+        )
+
+    dl.DLataset.traj_map = traj_map
 
     from prismatic.vla.datasets.rlds import dataset as rlds_dataset
 

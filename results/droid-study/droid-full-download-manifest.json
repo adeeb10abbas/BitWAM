@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "source": "gs://gresearch/robotics/droid/1.0.1/",
+  "output_dir": "/data/users/ali/bitvla_data/droid_rlds/droid/1.0.1",
+  "objects": 2050,
+  "bytes": 1865994705042,
+  "downloaded": 9,
+  "skipped": 2041,
+  "elapsed_seconds": 1355.7586846351624,
+  "verified": true
+}

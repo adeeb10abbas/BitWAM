@@ -1,0 +1,11 @@
+architecture: bitvla
+config_revision: d57e5b4
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+checkpoint: /data/users/ali/bitvla_runs/bitvla-action-only-posttrain--102000_chkpt
+output_dir: /data/users/ali/bitvla_evals/action-only-102000-50
+run_id: action-only-102000-50
+task_suite_name: libero_10
+episodes: 50
+task_count: 10
+seed: 7

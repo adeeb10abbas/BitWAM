@@ -15,4 +15,12 @@ tokenizers==0.21.4
 timm==0.9.10
 sentencepiece==0.1.99
 wandb==0.16.3
+robosuite==1.4.1
+mujoco==2.3.7
+bddl==3.6.0
+easydict==1.13
+cloudpickle==3.1.2
+gym==0.26.2
+imageio==2.37.4
+opencv-python-headless==4.11.0.86
 dlimp @ git+https://github.com/moojink/dlimp_openvla@040105d256bd28866cc6620621a3d5f7b6b91b46

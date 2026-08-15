@@ -39,6 +39,7 @@ _RUNTIME_FIELDS = {
     "world_hidden_dim",
     "world_learning_rate",
     "world_loss_weight",
+    "world_head_precision",
 }
 
 
@@ -54,6 +55,7 @@ class BitVLARuntimeConfig:
     world_learning_rate: float
     world_hidden_dim: int
     world_action_embedding_dim: int
+    world_head_precision: str
     save_backbone: bool
     world_checkpoint: Path | None
     optimizer_checkpoint: Path | None
@@ -101,6 +103,9 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     world_checkpoint = config.get("world_checkpoint")
     optimizer_checkpoint = config.get("optimizer_checkpoint")
     metrics_path = config.get("metrics_path")
+    world_head_precision = str(config.get("world_head_precision", "bf16"))
+    if world_head_precision not in {"bf16", "ternary"}:
+        raise ValueError("world_head_precision must be one of: bf16, ternary")
     return BitVLARuntimeConfig(
         upstream_root=upstream_root,
         upstream_revision=str(_required(config, "upstream_revision")),
@@ -110,6 +115,7 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         world_learning_rate=float(config.get("world_learning_rate", 1e-4)),
         world_hidden_dim=int(config.get("world_hidden_dim", 2048)),
         world_action_embedding_dim=int(config.get("world_action_embedding_dim", 256)),
+        world_head_precision=world_head_precision,
         save_backbone=bool(config.get("save_backbone", True)),
         world_checkpoint=Path(world_checkpoint) if world_checkpoint else None,
         optimizer_checkpoint=Path(optimizer_checkpoint) if optimizer_checkpoint else None,
@@ -237,6 +243,7 @@ def _initialize_world_head(action_head: nn.Module, device_id: int, constants: Mo
         action_dim=int(constants.ACTION_DIM),
         action_embedding_dim=_RUNTIME.world_action_embedding_dim,
         hidden_dim=_RUNTIME.world_hidden_dim,
+        ternary=_RUNTIME.world_head_precision == "ternary",
     ).to(device_id, dtype=torch.bfloat16)
     if _RUNTIME.world_checkpoint is not None:
         world_head.load_state_dict(_load_state(_RUNTIME.world_checkpoint))
@@ -472,6 +479,7 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "upstream_revision": _RUNTIME.upstream_revision,
                 "world_loss_weight": _RUNTIME.world_loss_weight,
                 "world_learning_rate": _RUNTIME.world_learning_rate,
+                "world_head_precision": _RUNTIME.world_head_precision,
                 "freeze_policy": _RUNTIME.freeze_policy,
                 "step": log_step,
             }

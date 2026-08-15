@@ -9,6 +9,55 @@ from torch import nn
 from torch.nn import functional as F
 
 
+class _TernaryWeight(torch.autograd.Function):
+    """Absmean ternary quantization with a straight-through gradient."""
+
+    @staticmethod
+    def forward(ctx, weight: torch.Tensor) -> torch.Tensor:
+        del ctx
+        dtype = weight.dtype
+        weight_float = weight.float()
+        scale = weight_float.abs().mean().clamp(min=1e-5)
+        quantized = (weight_float / scale).round().clamp(-1, 1) * scale
+        return quantized.to(dtype)
+
+    @staticmethod
+    def backward(ctx, gradient: torch.Tensor) -> tuple[torch.Tensor]:
+        del ctx
+        return (gradient,)
+
+
+class _EightBitActivation(torch.autograd.Function):
+    """Per-token absmax INT8 simulation with a straight-through gradient."""
+
+    @staticmethod
+    def forward(ctx, inputs: torch.Tensor) -> torch.Tensor:
+        del ctx
+        dtype = inputs.dtype
+        inputs_float = inputs.float()
+        scale = 127 / inputs_float.abs().amax(dim=-1, keepdim=True).clamp(min=1e-5)
+        quantized = (inputs_float * scale).round().clamp(-128, 127) / scale
+        return quantized.to(dtype)
+
+    @staticmethod
+    def backward(ctx, gradient: torch.Tensor) -> tuple[torch.Tensor]:
+        del ctx
+        return (gradient,)
+
+
+class TernaryLinear(nn.Linear):
+    """BitNet-compatible 1.58-bit weights and per-token 8-bit activations."""
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        quantized_inputs = _EightBitActivation.apply(inputs)
+        quantized_weight = _TernaryWeight.apply(self.weight)
+        return F.linear(quantized_inputs, quantized_weight, self.bias)
+
+    def effective_weight(self) -> torch.Tensor:
+        """Return the dequantized ternary matrix used by the forward pass."""
+        return _TernaryWeight.apply(self.weight.detach())
+
+
 def future_observation_indices(trajectory_length: int, horizon: int) -> tuple[int, ...]:
     """Return target-frame indices after executing an action chunk of ``horizon`` steps."""
     if trajectory_length < 1:
@@ -40,6 +89,7 @@ class LatentWorldModelHead(nn.Module):
         action_dim: int = 7,
         action_embedding_dim: int = 256,
         hidden_dim: int = 2048,
+        ternary: bool = False,
     ) -> None:
         super().__init__()
         if min(latent_dim, action_chunk_size, action_dim, action_embedding_dim, hidden_dim) < 1:
@@ -47,15 +97,17 @@ class LatentWorldModelHead(nn.Module):
         self.latent_dim = latent_dim
         self.action_chunk_size = action_chunk_size
         self.action_dim = action_dim
+        self.ternary = ternary
+        linear = TernaryLinear if ternary else nn.Linear
         self.state_norm = nn.LayerNorm(latent_dim)
         self.action_encoder = nn.Sequential(
-            nn.Linear(action_chunk_size * action_dim, action_embedding_dim),
+            linear(action_chunk_size * action_dim, action_embedding_dim),
             nn.SiLU(),
         )
         self.predictor = nn.Sequential(
-            nn.Linear(latent_dim + action_embedding_dim, hidden_dim),
+            linear(latent_dim + action_embedding_dim, hidden_dim),
             nn.SiLU(),
-            nn.Linear(hidden_dim, latent_dim),
+            linear(hidden_dim, latent_dim),
         )
 
     def predict(self, action_hidden_states: torch.Tensor, actions: torch.Tensor) -> torch.Tensor:

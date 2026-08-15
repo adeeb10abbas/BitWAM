@@ -12,7 +12,8 @@ world_loss_weight: 0.1
 world_learning_rate: 0.0001
 world_hidden_dim: 2048
 world_action_embedding_dim: 256
-world_checkpoint: /data/users/ali/bitvla_runs/bitwam-world-pretrain--102000_chkpt/world_model--102000_checkpoint.pt
+world_head_precision: ternary
+world_checkpoint: /data/users/ali/bitvla_runs/bitwam-world-ternary-calibration--100500_chkpt/world_model--100500_checkpoint.pt
 save_backbone: true
 metrics_path: /data/users/ali/bitvla_runs/bitwam-world-posttrain/metrics.jsonl
 
@@ -33,7 +34,8 @@ use_proprio: true
 batch_size: 2
 grad_accumulation_steps: 16
 learning_rate: 0.00001
-lr_vit: 0.000002
+# Keep the visual target space fixed while world gradients update the action-token pathway.
+lr_vit: 0.0
 warmup_steps: 375
 max_steps: 110000
 save_freq: 5000

@@ -1,0 +1,18 @@
+{
+  "successes": 10,
+  "episodes": 10,
+  "success_rate": 1.0,
+  "evaluation_seconds": 162.1,
+  "per_task": [
+    {"task_id": 0, "successes": 1, "episodes": 1},
+    {"task_id": 1, "successes": 1, "episodes": 1},
+    {"task_id": 2, "successes": 1, "episodes": 1},
+    {"task_id": 3, "successes": 1, "episodes": 1},
+    {"task_id": 4, "successes": 1, "episodes": 1},
+    {"task_id": 5, "successes": 1, "episodes": 1},
+    {"task_id": 6, "successes": 1, "episodes": 1},
+    {"task_id": 7, "successes": 1, "episodes": 1},
+    {"task_id": 8, "successes": 1, "episodes": 1},
+    {"task_id": 9, "successes": 1, "episodes": 1}
+  ]
+}

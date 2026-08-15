@@ -1,0 +1,27 @@
+{
+  "run_id": "native-bitvla-control-10",
+  "status": "completed",
+  "architecture": "native-bitvla",
+  "bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7",
+  "checkpoint": {
+    "repository": "hongyuw/ft-bitvla-bitsiglipL-224px-libero_long-bf16",
+    "revision": "d93ee990a5ecb87078118a0d4e9b7d051d4ef568",
+    "component_step": 100000
+  },
+  "environment": {
+    "task_suite": "libero_10",
+    "episodes_per_task": 1,
+    "seed": 7
+  },
+  "software": {
+    "torch": "2.9.1+cu128",
+    "robosuite": "1.4.1",
+    "mujoco": "2.3.7"
+  },
+  "hardware": "1x NVIDIA B200",
+  "artifacts": {
+    "log": "/data/users/ali/logs/bitvla-control-eval-10.log",
+    "results": "/data/users/ali/bitvla_evals/control-10/control-native-bitvla",
+    "videos": "/data/users/ali/BitVLA/openvla-oft/rollouts/control-native-bitvla"
+  }
+}

@@ -20,6 +20,7 @@ def _config(tmp_path: Path) -> dict:
         "upstream_revision": UPSTREAM_REVISION,
         "world_loss_weight": 0.25,
         "world_learning_rate": 2e-4,
+        "world_head_precision": "ternary",
         "freeze_policy": True,
         "seed": 11,
         "vla_path": "/models/control",
@@ -37,6 +38,7 @@ def test_parse_runtime_config_keeps_world_stage_separate(tmp_path: Path) -> None
     assert runtime.freeze_policy
     assert runtime.world_loss_weight == 0.25
     assert runtime.world_learning_rate == 2e-4
+    assert runtime.world_head_precision == "ternary"
     assert runtime.seed == 11
 
 
@@ -46,9 +48,15 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
     assert argv[argv.index("--vla_path") + 1] == "/models/control"
     assert argv[argv.index("--use_proprio") + 1] == "True"
     assert "--world_loss_weight" not in argv
+    assert "--world_head_precision" not in argv
     assert "--num_processes" not in argv
 
 
 def test_runtime_config_requires_positive_world_loss(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="must be positive"):
         parse_runtime_config(_config(tmp_path) | {"world_loss_weight": 0})
+
+
+def test_runtime_config_rejects_unknown_world_head_precision(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="world_head_precision"):
+        parse_runtime_config(_config(tmp_path) | {"world_head_precision": "int4"})

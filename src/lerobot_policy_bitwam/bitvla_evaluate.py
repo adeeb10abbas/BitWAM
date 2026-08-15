@@ -19,6 +19,7 @@ from lerobot_policy_bitwam.workflows import load_config
 def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> None:
     """Wrap upstream model initialization with BitWAM's packed inference conversion."""
     from lerobot_policy_bitwam.bitvla_packing import (
+        enable_compiled_bitlinear_projection,
         enable_compiled_bitlinear_runtime,
         enable_compiled_bitlinear_unpack,
         enable_torch_int8_bitlinear_runtime,
@@ -37,6 +38,8 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
         backend = str(config.get("packed_runtime_backend", "compiled_unpack"))
         if backend == "compiled_unpack":
             report["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
+        elif backend == "compiled_projection":
+            report["compiled_projection_layers"] = enable_compiled_bitlinear_projection(model)
         elif backend == "compiled":
             report["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
         elif backend == "torch_int8":

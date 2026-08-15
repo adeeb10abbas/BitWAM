@@ -79,6 +79,19 @@ def quantize_activation(inputs: torch.Tensor) -> torch.Tensor:
     return ((values * scale).round().clamp(-128, 127) / scale).to(dtype)
 
 
+def packed_linear(
+    inputs: torch.Tensor,
+    packed: torch.Tensor,
+    scale: torch.Tensor,
+    bias: torch.Tensor | None,
+    rows: int,
+    columns: int,
+) -> torch.Tensor:
+    """Decode a packed matrix and apply its linear projection."""
+    weight = dequantize_packed_weight(packed, scale, rows, columns)
+    return F.linear(inputs, weight, bias)
+
+
 def _packed_forward(
     layer: nn.Module,
     inputs: torch.Tensor,
@@ -112,6 +125,14 @@ def _torch_int8_forward(
     if layer.bias is not None:
         output = output + layer.bias
     return output
+
+
+def _compiled_linear_forward(layer: nn.Module, inputs: torch.Tensor, compiled_linear: Any) -> torch.Tensor:
+    upstream_module = sys.modules[layer.__class__.__module__]
+    if int(getattr(layer, "input_bits", 8)) == 8:
+        inputs = upstream_module.ActQuant.apply(inputs)
+    rows, columns = layer.orig_shape
+    return compiled_linear(inputs, layer.q_weight, layer.w_step, layer.bias, rows, columns)
 
 
 def enable_compiled_bitlinear_unpack(module: nn.Module) -> int:
@@ -155,6 +176,28 @@ def enable_compiled_bitlinear_runtime(module: nn.Module) -> int:
         optimized_layers += 1
     if optimized_layers == 0:
         raise RuntimeError("No packed BitLinear layers were available for the compiled runtime")
+    return optimized_layers
+
+
+def enable_compiled_bitlinear_projection(module: nn.Module) -> int:
+    """Compile packed decoding together with the BF16 projection, preserving activation math."""
+    compiled_linear = torch.compile(packed_linear, fullgraph=True, dynamic=True)
+    optimized_layers = 0
+    for candidate in module.modules():
+        if candidate.__class__.__name__ != "BitLinear" or not bool(getattr(candidate, "enable_qlora", False)):
+            continue
+        if not isinstance(getattr(candidate, "q_weight", None), torch.Tensor):
+            continue
+        candidate.w_step = candidate.w_step.to(candidate.q_weight.device)
+        candidate.forward = MethodType(
+            lambda layer, inputs, projection=compiled_linear: _compiled_linear_forward(
+                layer, inputs, projection
+            ),
+            candidate,
+        )
+        optimized_layers += 1
+    if optimized_layers == 0:
+        raise RuntimeError("No packed BitLinear layers were available for compiled projections")
     return optimized_layers
 
 

@@ -4,6 +4,7 @@ from torch import nn
 from lerobot_policy_bitwam.bitvla_packing import (
     dequantize_packed_weight,
     pack_bitlinear_weights,
+    packed_linear,
     quantize_activation,
     quantize_activation_int8,
     unpack_packed_weight_int8_transposed,
@@ -77,6 +78,19 @@ def test_dequantize_packed_weight_restores_four_codes_per_byte() -> None:
 
     assert restored.dtype == torch.bfloat16
     assert torch.equal(restored, codes.view(2, 3).to(torch.bfloat16) * 0.5)
+
+
+def test_packed_linear_matches_explicit_dequantization() -> None:
+    codes = torch.tensor([-1, 0, 1, -1, 1, 0], dtype=torch.int8)
+    shifted = torch.nn.functional.pad(codes.add(1).to(torch.uint8), (0, 2)).view(-1, 4)
+    packed = shifted[:, 0] | shifted[:, 1] << 2 | shifted[:, 2] << 4 | shifted[:, 3] << 6
+    inputs = torch.tensor([[0.5, -1.0, 2.0]], dtype=torch.bfloat16)
+    scale = torch.tensor(0.5)
+
+    actual = packed_linear(inputs, packed, scale, None, 2, 3)
+    expected = torch.nn.functional.linear(inputs, codes.view(2, 3).to(torch.bfloat16) * scale)
+
+    assert torch.equal(actual, expected)
 
 
 def test_unpack_int8_transposes_for_native_matrix_multiply() -> None:

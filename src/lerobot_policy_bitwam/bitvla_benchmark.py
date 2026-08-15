@@ -18,6 +18,7 @@ import torch
 
 from lerobot_policy_bitwam.bitvla_evaluate import _load_upstream_evaluator
 from lerobot_policy_bitwam.bitvla_packing import (
+    enable_compiled_bitlinear_projection,
     enable_compiled_bitlinear_runtime,
     enable_compiled_bitlinear_unpack,
     enable_torch_int8_bitlinear_runtime,
@@ -199,6 +200,8 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
         packed_backend = str(config.get("packed_runtime_backend", "eager_unpack"))
         if packed_backend == "compiled_unpack":
             packing["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
+        elif packed_backend == "compiled_projection":
+            packing["compiled_projection_layers"] = enable_compiled_bitlinear_projection(model)
         elif packed_backend == "compiled":
             packing["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
         elif packed_backend == "torch_int8":

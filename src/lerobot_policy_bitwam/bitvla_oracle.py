@@ -6,10 +6,11 @@ import argparse
 import json
 import multiprocessing as mp
 import os
+import random
 import time
 from collections import deque
-from collections.abc import Sequence
-from contextlib import suppress
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager, suppress
 from multiprocessing.connection import Connection
 from pathlib import Path
 from types import SimpleNamespace
@@ -83,9 +84,78 @@ def _evaluate_candidate(env: Any, evaluator: Any, cfg: Any, actions: np.ndarray)
     return progress, success
 
 
-def _branch_worker(config: dict[str, Any], task_id: int, connection: Connection) -> None:
+@contextmanager
+def _preserve_random_state() -> Iterator[None]:
+    """Prevent branch-policy queries from changing the deployed policy RNG stream."""
+    import torch
+
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_state = torch.get_rng_state()
+    cuda_states = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    try:
+        yield
+    finally:
+        random.setstate(python_state)
+        np.random.set_state(numpy_state)
+        torch.set_rng_state(torch_state)
+        if cuda_states is not None:
+            torch.cuda.set_rng_state_all(cuda_states)
+
+
+def _build_nominal_plan(
+    *,
+    env: Any,
+    evaluator: Any,
+    cfg: Any,
+    state: np.ndarray,
+    timestep: int,
+    base_actions: np.ndarray,
+    planning_horizon: int,
+    connection: Connection,
+) -> tuple[np.ndarray, int]:
+    """Roll out one shared policy continuation and return its open-loop action plan."""
+    nominal_chunks = [base_actions[:planning_horizon]]
+    current_chunk = nominal_chunks[0]
+    planned_actions = len(current_chunk)
+    policy_calls = 0
+    _restore(env, state, timestep)
+
+    while planned_actions < planning_horizon:
+        done = False
+        obs = None
+        for action in current_chunk:
+            processed = evaluator.process_action(action, cfg.model_family)
+            obs, _, done, _ = env.step(processed.tolist())
+            if done:
+                break
+        if done:
+            break
+        connection.send({"type": "action_request", "observation": obs})
+        response = connection.recv()
+        if not isinstance(response, dict) or response.get("type") != "action_response":
+            raise RuntimeError(f"Expected branch action response, received {response!r}")
+        future_actions = np.asarray(response["actions"], dtype=np.float32)
+        remaining = planning_horizon - planned_actions
+        current_chunk = future_actions[:remaining]
+        if not len(current_chunk):
+            raise RuntimeError("Policy returned an empty future action chunk")
+        nominal_chunks.append(current_chunk)
+        planned_actions += len(current_chunk)
+        policy_calls += 1
+
+    return np.concatenate(nominal_chunks, axis=0), policy_calls
+
+
+def _branch_worker(
+    config: dict[str, Any],
+    task_id: int,
+    planning_horizon: int,
+    connection: Connection,
+) -> None:
     """Own the branch simulator in another process so it cannot mutate control globals."""
-    env = None
+    score_env = None
+    planning_env = None
     try:
         evaluator = _load_upstream_evaluator(config)
         cfg = SimpleNamespace(model_family="bitnet")
@@ -101,40 +171,92 @@ def _branch_worker(config: dict[str, Any], task_id: int, connection: Connection)
             task.bddl_file,
         )
         # Branch scoring needs physics and predicates, not camera observations.
-        env = ControlEnv(
+        score_env = ControlEnv(
             bddl_file_name=task_bddl_file,
             use_camera_obs=False,
             has_offscreen_renderer=False,
         )
-        env.seed(0)
+        score_env.seed(0)
+        if planning_horizon > 8:
+            planning_env, _ = evaluator.get_libero_env(
+                task,
+                cfg.model_family,
+                resolution=256,
+            )
+            planning_env.reset()
         connection.send({"ready": True})
         while True:
             payload = connection.recv()
             if payload is None:
                 break
-            state, timestep, candidates = payload
+            if not isinstance(payload, dict) or payload.get("type") != "score_request":
+                raise RuntimeError(f"Expected score request, received {payload!r}")
+            state = payload["state"]
+            timestep = int(payload["timestep"])
+            base_actions = np.asarray(payload["base_actions"], dtype=np.float32)
+            if planning_horizon > len(base_actions):
+                if planning_env is None:
+                    raise RuntimeError("Long planning horizon requires a rendered planning environment")
+                nominal, policy_calls = _build_nominal_plan(
+                    env=planning_env,
+                    evaluator=evaluator,
+                    cfg=cfg,
+                    state=state,
+                    timestep=timestep,
+                    base_actions=base_actions,
+                    planning_horizon=planning_horizon,
+                    connection=connection,
+                )
+            else:
+                nominal = base_actions[:planning_horizon]
+                policy_calls = 0
+            connection.send(
+                {
+                    "type": "nominal_plan",
+                    "actions": nominal,
+                    "policy_calls": policy_calls,
+                }
+            )
+            candidate_payload = connection.recv()
+            if (
+                not isinstance(candidate_payload, dict)
+                or candidate_payload.get("type") != "candidate_plans"
+            ):
+                raise RuntimeError(f"Expected candidate plans, received {candidate_payload!r}")
+            candidates = np.asarray(candidate_payload["actions"], dtype=np.float32)
             scores = []
             for candidate in candidates:
-                _restore(env, state, timestep)
-                score, _ = _evaluate_candidate(env, evaluator, cfg, candidate)
+                _restore(score_env, state, timestep)
+                score, _ = _evaluate_candidate(score_env, evaluator, cfg, candidate)
                 scores.append(score)
-            connection.send(scores)
+            connection.send(
+                {
+                    "type": "scores",
+                    "scores": scores,
+                    "plan_length": len(nominal),
+                    "policy_calls": policy_calls,
+                }
+            )
     except BaseException as exc:
         with suppress(BrokenPipeError, EOFError):
             connection.send({"error": f"{type(exc).__name__}: {exc}"})
         raise
     finally:
-        if env is not None:
-            env.close()
+        if planning_env is not None:
+            planning_env.close()
+        if score_env is not None:
+            score_env.close()
         connection.close()
 
 
-def _start_branch_worker(config: dict[str, Any], task_id: int) -> tuple[mp.Process, Connection]:
+def _start_branch_worker(
+    config: dict[str, Any], task_id: int, planning_horizon: int
+) -> tuple[mp.Process, Connection]:
     context = mp.get_context("spawn")
     parent_connection, child_connection = context.Pipe()
     process = context.Process(
         target=_branch_worker,
-        args=(config, task_id, child_connection),
+        args=(config, task_id, planning_horizon, child_connection),
         daemon=True,
     )
     process.start()
@@ -165,6 +287,7 @@ def run_episode(
     noisy_action_projector: Any,
     initial_state: np.ndarray,
     candidate_count: int,
+    planning_horizon: int,
     noise_scale: float,
     action_stats: dict[str, Any],
     rng: np.random.Generator,
@@ -182,6 +305,7 @@ def run_episode(
     nonbase_wins = 0
     strict_progress_wins = 0
     branch_steps = 0
+    branch_policy_calls = 0
     success = False
 
     while t < max_steps + cfg.num_steps_wait:
@@ -213,32 +337,78 @@ def run_episode(
                 action_queue.extend(base_actions)
                 decisions += 1
                 continue
-            candidates = make_action_candidates(
-                base_actions,
-                count=candidate_count,
-                rng=rng,
-                action_std=action_std,
-                action_low=action_low,
-                action_high=action_high,
-                noise_scale=noise_scale,
-            )
             state = env.get_sim_state().copy()
             timestep = int(env.env.timestep)
             if branch_connection is None:
                 raise RuntimeError("Multiple candidates require an isolated branch environment")
-            branch_connection.send((state, timestep, candidates))
-            if not branch_connection.poll(180):
-                raise RuntimeError("Timed out waiting for isolated branch scores")
-            scores = branch_connection.recv()
-            if isinstance(scores, dict) and "error" in scores:
-                raise RuntimeError(f"Isolated branch simulator failed: {scores['error']}")
-            branch_steps += len(candidates) * len(base_actions)
+            branch_connection.send(
+                {
+                    "type": "score_request",
+                    "state": state,
+                    "timestep": timestep,
+                    "base_actions": base_actions,
+                }
+            )
+            candidates = None
+            scores = None
+            with _preserve_random_state():
+                while scores is None:
+                    if not branch_connection.poll(180):
+                        raise RuntimeError("Timed out waiting for isolated branch scores")
+                    message = branch_connection.recv()
+                    if isinstance(message, dict) and "error" in message:
+                        raise RuntimeError(f"Isolated branch simulator failed: {message['error']}")
+                    if not isinstance(message, dict):
+                        raise RuntimeError(f"Invalid branch message: {message!r}")
+                    if message.get("type") == "action_request":
+                        future_observation, _ = evaluator.prepare_observation(
+                            message["observation"], resize_size
+                        )
+                        future_actions = np.asarray(
+                            evaluator.get_action(
+                                cfg,
+                                model,
+                                future_observation,
+                                task_description,
+                                processor=processor,
+                                action_head=action_head,
+                                proprio_projector=proprio_projector,
+                                noisy_action_projector=noisy_action_projector,
+                                use_film=cfg.use_film,
+                            ),
+                            dtype=np.float32,
+                        )
+                        branch_connection.send(
+                            {"type": "action_response", "actions": future_actions}
+                        )
+                    elif message.get("type") == "nominal_plan":
+                        nominal = np.asarray(message["actions"], dtype=np.float32)
+                        candidates = make_action_candidates(
+                            nominal,
+                            count=candidate_count,
+                            rng=rng,
+                            action_std=action_std,
+                            action_low=action_low,
+                            action_high=action_high,
+                            noise_scale=noise_scale,
+                        )
+                        branch_connection.send(
+                            {"type": "candidate_plans", "actions": candidates}
+                        )
+                    elif message.get("type") == "scores":
+                        if candidates is None:
+                            raise RuntimeError("Received branch scores before candidate plans")
+                        scores = message["scores"]
+                        branch_steps += len(candidates) * int(message["plan_length"])
+                        branch_policy_calls += int(message["policy_calls"])
+                    else:
+                        raise RuntimeError(f"Unknown branch message: {message!r}")
             selected = int(np.argmax(scores))
             if selected:
                 nonbase_wins += 1
                 if scores[selected] > scores[0]:
                     strict_progress_wins += 1
-            action_queue.extend(candidates[selected])
+            action_queue.extend(candidates[selected, : cfg.num_open_loop_steps])
             decisions += 1
 
         action = evaluator.process_action(action_queue.popleft(), cfg.model_family)
@@ -258,6 +428,7 @@ def run_episode(
         "nonbase_wins": nonbase_wins,
         "strict_progress_wins": strict_progress_wins,
         "branch_steps": branch_steps,
+        "branch_policy_calls": branch_policy_calls,
     }
 
 
@@ -268,6 +439,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
     task_ids = [int(value) for value in config.get("task_ids", range(10))]
     seed = int(config.get("seed", 7))
     noise_scale = float(config.get("noise_scale", 0.15))
+    planning_horizon = int(config.get("planning_horizon", 8))
 
     cfg = evaluator.GenerateConfig(
         model_family="bitnet",
@@ -278,6 +450,10 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         seed=seed,
     )
     evaluator.validate_config(cfg)
+    if planning_horizon < cfg.num_open_loop_steps:
+        raise ValueError(
+            f"planning_horizon must be at least {cfg.num_open_loop_steps}, got {planning_horizon}"
+        )
     evaluator.set_seed_everywhere(seed)
     model, action_head, proprio_projector, noisy_action_projector, processor = (
         evaluator.initialize_model(cfg)
@@ -302,7 +478,9 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         branch_process = None
         branch_connection = None
         if candidate_count > 1:
-            branch_process, branch_connection = _start_branch_worker(config, task_id)
+            branch_process, branch_connection = _start_branch_worker(
+                config, task_id, planning_horizon
+            )
         try:
             for episode_id in range(trials):
                 episode_rng = np.random.default_rng(
@@ -322,6 +500,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                     noisy_action_projector=noisy_action_projector,
                     initial_state=initial_states[episode_id],
                     candidate_count=candidate_count,
+                    planning_horizon=planning_horizon,
                     noise_scale=noise_scale,
                     action_stats=action_stats,
                     rng=episode_rng,
@@ -346,6 +525,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         "checkpoint": str(config["checkpoint"]),
         "upstream_revision": str(config["upstream_revision"]),
         "candidate_count": candidate_count,
+        "planning_horizon": planning_horizon,
         "noise_scale": noise_scale,
         "seed": seed,
         "successes": successes,
@@ -368,6 +548,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--task-id", type=int)
     parser.add_argument("--candidate-count", type=int)
+    parser.add_argument("--planning-horizon", type=int)
     parser.add_argument("--trials-per-task", type=int)
     parser.add_argument("--output-path", type=Path)
     args = parser.parse_args(argv)
@@ -376,6 +557,8 @@ def main(argv: Sequence[str] | None = None) -> None:
         config["task_ids"] = [args.task_id]
     if args.candidate_count is not None:
         config["candidate_count"] = args.candidate_count
+    if args.planning_horizon is not None:
+        config["planning_horizon"] = args.planning_horizon
     if args.trials_per_task is not None:
         config["trials_per_task"] = args.trials_per_task
     if args.output_path is not None:

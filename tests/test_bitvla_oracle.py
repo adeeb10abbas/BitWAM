@@ -3,12 +3,16 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from lerobot_policy_bitwam.bitvla_oracle import goal_progress, make_action_candidates
+from lerobot_policy_bitwam.bitvla_oracle import (
+    _build_nominal_plan,
+    goal_progress,
+    make_action_candidates,
+)
 
 
 def test_candidates_are_nested_and_preserve_base_and_gripper() -> None:
-    actions = np.zeros((8, 7), dtype=np.float32)
-    actions[:, 6] = np.linspace(0, 1, 8)
+    actions = np.zeros((32, 7), dtype=np.float32)
+    actions[:, 6] = np.linspace(0, 1, 32)
     kwargs = {
         "actions": actions,
         "rng": np.random.default_rng(5),
@@ -48,3 +52,55 @@ def test_goal_progress_uses_libero_predicates() -> None:
         _eval_predicate=lambda goal: goal != "b",
     )
     assert goal_progress(SimpleNamespace(env=raw)) == (2, 3)
+
+
+def test_nominal_plan_queries_only_the_shared_policy_tail() -> None:
+    class FakeEnv:
+        def __init__(self) -> None:
+            self.env = SimpleNamespace(timestep=0, done=False)
+            self.steps = 0
+
+        def regenerate_obs_from_state(self, state: np.ndarray) -> dict[str, int]:
+            return {"step": self.steps}
+
+        def step(self, action: list[float]) -> tuple[dict[str, int], float, bool, dict]:
+            self.steps += 1
+            return {"step": self.steps}, 0.0, False, {}
+
+    class FakeConnection:
+        def __init__(self) -> None:
+            self.sent: list[dict] = []
+            self.responses = [
+                {"type": "action_response", "actions": np.full((8, 7), 2.0)},
+                {"type": "action_response", "actions": np.full((8, 7), 3.0)},
+            ]
+
+        def send(self, message: dict) -> None:
+            self.sent.append(message)
+
+        def recv(self) -> dict:
+            return self.responses.pop(0)
+
+    env = FakeEnv()
+    connection = FakeConnection()
+    nominal, policy_calls = _build_nominal_plan(
+        env=env,
+        evaluator=SimpleNamespace(process_action=lambda action, family: action),
+        cfg=SimpleNamespace(model_family="bitnet"),
+        state=np.zeros(4),
+        timestep=9,
+        base_actions=np.ones((8, 7), dtype=np.float32),
+        planning_horizon=20,
+        connection=connection,
+    )
+
+    assert nominal.shape == (20, 7)
+    np.testing.assert_array_equal(nominal[:8], 1.0)
+    np.testing.assert_array_equal(nominal[8:16], 2.0)
+    np.testing.assert_array_equal(nominal[16:], 3.0)
+    assert policy_calls == 2
+    assert env.steps == 16
+    assert [message["type"] for message in connection.sent] == [
+        "action_request",
+        "action_request",
+    ]

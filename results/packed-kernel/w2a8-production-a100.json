@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "status": "systems_validated_quality_recovery_pending",
+  "date": "2026-08-15",
+  "code_revision": "9743c62",
+  "upstream_bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7",
+  "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+  "kernel_provenance": {
+    "bitnet_url": "https://github.com/microsoft/BitNet/tree/main/gpu",
+    "bitnet_live_url": "https://bitnet.live/",
+    "bitnet_reference_revision": "0b341e582afbf9e1011f24744b554c96a3477eb5",
+    "license": "MIT",
+    "adapted_principles": [
+      "packed 16-weight interleave",
+      "DP4A integer dot products",
+      "scale application after integer accumulation"
+    ],
+    "bitwam_extensions": [
+      "shape-generic Triton kernels",
+      "DP4A dispatch for up to eight tokens",
+      "Tensor-Core INT8 dispatch for larger token batches",
+      "per-channel scale and optional bias epilogue",
+      "direct integration with packed BitVLA BitLinear modules"
+    ]
+  },
+  "device": {
+    "name": "NVIDIA A100-SXM4-80GB",
+    "compute_capability": "8.0",
+    "torch_version": "2.9.1+cu128",
+    "cuda_version": "12.8",
+    "python_version": "3.10.12"
+  },
+  "protocol": {
+    "batch_size": 1,
+    "action_chunk_size": 8,
+    "input": "fixed seeded 224x224 RGB main/wrist images and zero proprioception",
+    "timing_scope": "official get_action including preprocessing and synchronized CUDA inference",
+    "warmup_iterations_per_process": 10,
+    "timed_iterations_per_process": 50,
+    "independent_processes_per_runtime": 2,
+    "dense_control": "ternary weights quantized once to BF16 and cached"
+  },
+  "packed_coverage": {
+    "layers": 366,
+    "scope": "text_and_vision_BitLinear",
+    "eligible_weight_count": 2479890432,
+    "bf16_weight_bytes": 4959780864,
+    "packed_weight_bytes": 619972608,
+    "eligible_weight_storage_reduction": 0.875,
+    "eligible_weight_compression_ratio": 8.0,
+    "decoded_weight_cache_bytes": 0,
+    "packed_layout": "dp4a_interleaved_two_bit"
+  },
+  "paired_benchmark": {
+    "packed_w2a8": {
+      "process_p50_ms": [141.7195505, 142.701774],
+      "process_p95_ms": [145.8174506, 146.2856426],
+      "mean_process_p50_ms": 142.21066225,
+      "cuda_allocated_after_load_bytes": 1533362688,
+      "cuda_peak_allocated_during_query_bytes": 2168180736,
+      "control_steps_per_second_at_best_p50": 56.44951576388184
+    },
+    "cached_ternary_bf16": {
+      "process_p50_ms": [136.5240695, 137.2184865],
+      "process_p95_ms": [142.6783167, 138.8863639],
+      "mean_process_p50_ms": 136.871278,
+      "cuda_allocated_after_load_bytes": 5880098816,
+      "cuda_peak_allocated_during_query_bytes": 6515878400,
+      "action_exact_match": true
+    },
+    "comparison": {
+      "paired_p50_latency_overhead_fraction": [0.0380554214, 0.039960268],
+      "mean_paired_p50_latency_overhead_fraction": 0.0390078447,
+      "loaded_cuda_allocation_reduction_fraction": 0.739228415,
+      "loaded_cuda_capacity_ratio": 3.83477364,
+      "query_peak_reduction_fraction": 0.667246593,
+      "query_peak_capacity_ratio": 3.005228435
+    },
+    "unrecovered_action_difference": {
+      "exact_match": false,
+      "max_absolute_error": 0.1240234375,
+      "mean_absolute_error": 0.017357375115696076
+    }
+  },
+  "fresh_dp4a_artifact": {
+    "path": "/data/users/ali/bitvla_benchmarks/packed-artifact-validation-102000-dp4a-production-v2",
+    "artifact_bytes": 1300064754,
+    "packed_layout": "dp4a",
+    "runtime": "triton_w2a8",
+    "runtime_layers": 366,
+    "meta_parameters_after_load": 0,
+    "first_direct_projection_finite": true,
+    "tensor_aliases_preserved": true,
+    "dense": {
+      "model_weight_artifact_bytes": 5639200392,
+      "cuda_peak_bytes": 5737242112,
+      "process_peak_rss_kib": 6964084,
+      "load_seconds": 26.448792058043182
+    },
+    "packed": {
+      "cuda_allocated_bytes": 1426571264,
+      "cuda_peak_bytes": 1426578432,
+      "process_peak_rss_kib": 3079436,
+      "load_seconds": 22.443722655065358
+    },
+    "comparison": {
+      "artifact_size_reduction_fraction": 0.7694593801,
+      "artifact_capacity_ratio": 4.337630395,
+      "cuda_peak_reduction_fraction": 0.7513477026,
+      "cuda_peak_capacity_ratio": 4.021680115,
+      "process_peak_rss_reduction_fraction": 0.5578117668,
+      "first_export_alias_deduplication_reduction_fraction": 0.335608998
+    }
+  },
+  "full_policy_direct_artifact": {
+    "path": "/data/users/ali/bitvla_benchmarks/packed-artifact-validation-102000-dp4a-production-v2",
+    "load_seconds": 5.9563869731500745,
+    "warmup_iterations": 10,
+    "timed_iterations": 50,
+    "p50_ms": 144.1766615,
+    "p95_ms": 151.31258915,
+    "mean_ms": 144.81782264,
+    "cuda_allocated_after_load_bytes": 1559416320,
+    "cuda_peak_allocated_during_load_bytes": 1678059520,
+    "cuda_peak_allocated_during_query_bytes": 2205140992,
+    "parameter_count": 405297319,
+    "triton_w2a8_layers": 366,
+    "comparison_to_cached_ternary_bf16": {
+      "loaded_cuda_allocation_reduction_fraction": 0.7347975997,
+      "loaded_cuda_capacity_ratio": 3.770704937,
+      "query_peak_reduction_fraction": 0.6615742565,
+      "query_peak_capacity_ratio": 2.954857954
+    }
+  },
+  "recovery_smoke": {
+    "config": "configs/bitvla-world-w2a8-kernel-recovery-smoke.yaml",
+    "checkpoint": "/data/users/ali/bitvla_runs/bitwam-w2a8-kernel-recovery-smoke--102001_chkpt",
+    "w2a8_layers": 366,
+    "micro_steps_recorded": 2,
+    "forward_backward_optimizer_and_save_completed": true,
+    "disposable_optimizer_state_removed_after_validation": true,
+    "final_action_loss": 0.04498291015625,
+    "final_world_loss": 0.04872024059295654,
+    "final_world_cosine_similarity": 0.9512797594070435,
+    "cuda_max_memory_allocated_bytes": 38325069312
+  },
+  "rejected_ablation": {
+    "name": "python_stream_local_activation_workspace",
+    "reason": "two repeated process measurements regressed end-to-end p50 latency",
+    "p50_ms": [149.431137, 148.2365915]
+  },
+  "claim_limits": {
+    "closed_loop_success_measured": false,
+    "quality_recovery_complete": false,
+    "same_budget_multi_future_throughput_measured": false,
+    "whole_policy_is_ternary": false
+  }
+}

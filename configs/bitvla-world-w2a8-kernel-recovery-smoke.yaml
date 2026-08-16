@@ -1,0 +1,53 @@
+architecture: bitvla
+config_revision: pending
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+stage: w2a8_integer_kernel_recovery_smoke
+seed: 0
+num_processes: 1
+
+# Minimal real LIBERO-10 forward/backward/update smoke from the available 102k
+# world checkpoint. This validates the exact W2A8 deployment operation order
+# and its STE before launching recovery from the final DROID checkpoint.
+freeze_policy: false
+w2a8_qat_semantics: true
+w2a8_qat_activation_backend: triton
+w2a8_qat_scope: all
+world_loss_weight: 0.1
+world_contrastive_weight: 1.0
+world_contrastive_margin: 0.05
+world_learning_rate: 0.00002
+world_hidden_dim: 2048
+world_action_embedding_dim: 256
+world_head_precision: ternary
+world_action_mode: normal
+world_checkpoint: /data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt/world_model--102000_checkpoint.pt
+save_backbone: false
+metrics_path: /data/users/ali/bitvla_runs/bitwam-w2a8-kernel-recovery-smoke/metrics.jsonl
+
+output_dir: /data/users/ali/bitvla_runs/bitwam-w2a8-kernel-recovery-smoke
+run_id: bitvla-world-w2a8-kernel-recovery-smoke-seed0
+
+vla_path: /data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt
+data_root_dir: /data/users/ali/bitvla_data/modified_libero_rlds
+dataset_name: libero_10_no_noops
+run_root_dir: /data/users/ali/bitvla_runs
+run_id_override: bitwam-w2a8-kernel-recovery-smoke
+resume: true
+resume_step: 102000
+use_l1_regression: true
+use_lora: false
+num_images_in_input: 2
+use_proprio: true
+batch_size: 1
+grad_accumulation_steps: 1
+learning_rate: 0.000002
+lr_vit: 0.000001
+warmup_steps: 1
+max_steps: 102001
+save_freq: 1
+save_latest_checkpoint_only: false
+shuffle_buffer_size: 100
+image_aug: false
+wandb_log_freq: 1
+use_wandb: false

@@ -49,6 +49,9 @@ _RUNTIME_FIELDS = {
     "world_learning_rate",
     "world_loss_weight",
     "world_head_precision",
+    "w2a8_qat_activation_backend",
+    "w2a8_qat_scope",
+    "w2a8_qat_semantics",
 }
 
 
@@ -80,6 +83,9 @@ class BitVLARuntimeConfig:
     metrics_log_frequency: int
     seed: int
     batch_size_per_rank: int
+    w2a8_qat_semantics: bool
+    w2a8_qat_activation_backend: str
+    w2a8_qat_scope: str
 
 
 class _FrozenModule(nn.Module):
@@ -108,6 +114,15 @@ _METRICS = {
 _FORWARD_COUNT = 0
 _EXAMPLES_SEEN = 0
 _FIRST_FORWARD_TIME: float | None = None
+
+
+def _mean_nonempty_metrics(metrics: dict[str, deque[float]]) -> dict[str, float]:
+    """Average populated metric windows without inventing missing observations."""
+    return {
+        name: sum(values) / len(values)
+        for name, values in metrics.items()
+        if values
+    }
 
 
 def _is_droid_dataset_name(name: str) -> bool:
@@ -173,6 +188,26 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
     metrics_log_frequency = int(config.get("wandb_log_freq", 10))
     if metrics_log_frequency < 1:
         raise ValueError("wandb_log_freq must be positive")
+    w2a8_qat_semantics = bool(config.get("w2a8_qat_semantics", False))
+    w2a8_qat_activation_backend = str(config.get("w2a8_qat_activation_backend", "torch"))
+    w2a8_qat_scope = str(config.get("w2a8_qat_scope", "all"))
+    if w2a8_qat_activation_backend not in {"torch", "hybrid", "triton"}:
+        raise ValueError(
+            "w2a8_qat_activation_backend must be one of: torch, hybrid, triton"
+        )
+    valid_w2a8_scopes = {
+        "all",
+        "text",
+        "vision",
+        "text_mlp",
+        "text_mlp_down",
+        "text_mlp_gate_up",
+        "text_attention",
+    }
+    if w2a8_qat_scope not in valid_w2a8_scopes:
+        raise ValueError(f"Unsupported W2A8 QAT scope: {w2a8_qat_scope}")
+    if w2a8_qat_semantics and bool(config.get("freeze_policy", False)):
+        raise ValueError("W2A8 QAT semantics require an unfrozen policy")
     return BitVLARuntimeConfig(
         upstream_root=upstream_root,
         upstream_revision=str(_required(config, "upstream_revision")),
@@ -200,6 +235,9 @@ def parse_runtime_config(config: dict[str, Any]) -> BitVLARuntimeConfig:
         metrics_log_frequency=metrics_log_frequency,
         seed=int(config.get("seed", 0)),
         batch_size_per_rank=int(config.get("batch_size", 1)),
+        w2a8_qat_semantics=w2a8_qat_semantics,
+        w2a8_qat_activation_backend=w2a8_qat_activation_backend,
+        w2a8_qat_scope=w2a8_qat_scope,
     )
 
 
@@ -419,6 +457,21 @@ def _patch_module_wrapping(upstream: ModuleType) -> None:
         assert _RUNTIME is not None
         if module.__class__.__name__ == "L1RegressionActionHead":
             _initialize_world_head(module, device_id, constants)
+        if _RUNTIME.w2a8_qat_semantics:
+            from lerobot_policy_bitwam.bitvla_w2a8_training import enable_w2a8_qat_semantics
+
+            converted = enable_w2a8_qat_semantics(
+                module,
+                scope=_RUNTIME.w2a8_qat_scope,
+                activation_backend=_RUNTIME.w2a8_qat_activation_backend,
+                require_layers=False,
+            )
+            if converted:
+                print(
+                    "Enabled kernel-matched W2A8 QAT semantics: "
+                    f"layers={converted}, scope={_RUNTIME.w2a8_qat_scope}, "
+                    f"activation={_RUNTIME.w2a8_qat_activation_backend}"
+                )
         if _RUNTIME.freeze_policy:
             for parameter in module.parameters():
                 parameter.requires_grad_(False)
@@ -625,7 +678,7 @@ def _run_forward_pass(
                 "cuda_memory_reserved_bytes": torch.cuda.memory_reserved(device_id),
                 "cuda_max_memory_allocated_bytes": torch.cuda.max_memory_allocated(device_id),
                 "cuda_max_memory_reserved_bytes": torch.cuda.max_memory_reserved(device_id),
-                **{name: sum(values) / len(values) for name, values in _METRICS.items()},
+                **_mean_nonempty_metrics(_METRICS),
             }
             with _RUNTIME.metrics_path.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(payload) + "\n")
@@ -644,13 +697,7 @@ def _patch_metrics(upstream: ModuleType) -> None:
 
     def compute_smoothened_metrics(metrics_deques):
         metrics = original(metrics_deques)
-        metrics.update(
-            {
-                name: sum(values) / len(values)
-                for name, values in _METRICS.items()
-                if values
-            }
-        )
+        metrics.update(_mean_nonempty_metrics(_METRICS))
         return metrics
 
     upstream.compute_smoothened_metrics = compute_smoothened_metrics
@@ -720,6 +767,9 @@ def _patch_checkpointing(upstream: ModuleType) -> None:
                 "world_contrastive_weight": _RUNTIME.world_contrastive_weight,
                 "world_contrastive_margin": _RUNTIME.world_contrastive_margin,
                 "freeze_policy": _RUNTIME.freeze_policy,
+                "w2a8_qat_semantics": _RUNTIME.w2a8_qat_semantics,
+                "w2a8_qat_activation_backend": _RUNTIME.w2a8_qat_activation_backend,
+                "w2a8_qat_scope": _RUNTIME.w2a8_qat_scope,
                 "dataset_name": cfg.dataset_name,
                 "data_root_dir": str(cfg.data_root_dir),
                 "base_model": cfg.vla_path,

@@ -1,9 +1,11 @@
+from collections import deque
 from pathlib import Path
 
 import pytest
 
 from lerobot_policy_bitwam.bitvla_train import (
     _is_droid_dataset_name,
+    _mean_nonempty_metrics,
     _minimum_droid_trajectory_length,
     _select_droid_statistics,
     build_upstream_argv,
@@ -11,6 +13,15 @@ from lerobot_policy_bitwam.bitvla_train import (
 )
 
 UPSTREAM_REVISION = "8afac0260b3748b14657a69ec58e3d9f0d6da3a7"
+
+
+def test_metric_averaging_omits_unobserved_batch_dependent_values() -> None:
+    metrics = {
+        "world_loss": deque([0.4, 0.2]),
+        "world_action_conditioning_gap": deque(),
+    }
+
+    assert _mean_nonempty_metrics(metrics) == {"world_loss": pytest.approx(0.3)}
 
 
 def _config(tmp_path: Path) -> dict:
@@ -59,6 +70,9 @@ def test_parse_runtime_config_keeps_world_stage_separate(tmp_path: Path) -> None
     assert runtime.world_action_mode == "shuffled"
     assert runtime.metrics_log_frequency == 7
     assert runtime.seed == 11
+    assert runtime.w2a8_qat_semantics is False
+    assert runtime.w2a8_qat_activation_backend == "torch"
+    assert runtime.w2a8_qat_scope == "all"
 
 
 def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
@@ -75,6 +89,9 @@ def test_build_upstream_argv_excludes_bitwam_fields(tmp_path: Path) -> None:
     assert "--rlds_split" not in argv
     assert "--dataset_statistics_path" not in argv
     assert "--world_action_mode" not in argv
+    assert "--w2a8_qat_semantics" not in argv
+    assert "--w2a8_qat_activation_backend" not in argv
+    assert "--w2a8_qat_scope" not in argv
     assert "--num_processes" not in argv
 
 
@@ -121,6 +138,33 @@ def test_runtime_config_rejects_unknown_world_action_mode(tmp_path: Path) -> Non
 def test_runtime_config_rejects_nonpositive_metrics_frequency(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="wandb_log_freq"):
         parse_runtime_config(_config(tmp_path) | {"wandb_log_freq": 0})
+
+
+def test_runtime_config_accepts_kernel_matched_qat_for_unfrozen_policy(tmp_path: Path) -> None:
+    runtime = parse_runtime_config(
+        _config(tmp_path)
+        | {
+            "freeze_policy": False,
+            "w2a8_qat_semantics": True,
+            "w2a8_qat_activation_backend": "triton",
+            "w2a8_qat_scope": "vision",
+        }
+    )
+    assert runtime.w2a8_qat_semantics is True
+    assert runtime.w2a8_qat_activation_backend == "triton"
+    assert runtime.w2a8_qat_scope == "vision"
+
+
+def test_runtime_config_rejects_kernel_matched_qat_on_frozen_policy(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="unfrozen"):
+        parse_runtime_config(_config(tmp_path) | {"w2a8_qat_semantics": True})
+
+
+def test_runtime_config_rejects_unknown_qat_activation_backend(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="activation_backend"):
+        parse_runtime_config(
+            _config(tmp_path) | {"w2a8_qat_activation_backend": "unknown"}
+        )
 
 
 @pytest.mark.parametrize("split", ("val", "train+test", "train[:99%] ", "train[::2]"))

@@ -111,3 +111,25 @@ def test_ternary_world_head_uses_ternary_matrices_and_straight_through_gradients
     output = head(torch.randn(4, 5, 16), torch.randn(4, 2, 3), torch.randn(4, 16))
     output.loss.backward()
     assert all(layer.weight.grad is not None for layer in ternary_layers)
+
+
+def test_bf16_world_head_accepts_fp32_backbone_hidden_states() -> None:
+    torch.manual_seed(3)
+    head = LatentWorldModelHead(
+        16,
+        action_chunk_size=2,
+        action_dim=3,
+        action_embedding_dim=8,
+        hidden_dim=24,
+        ternary=True,
+    ).to(dtype=torch.bfloat16)
+    hidden = torch.randn(2, 5, 16, dtype=torch.float32, requires_grad=True)
+    actions = torch.randn(2, 2, 3, dtype=torch.float32, requires_grad=True)
+    target = torch.randn(2, 16, dtype=torch.bfloat16)
+
+    output = head(hidden, actions, target)
+    output.loss.backward()
+
+    assert output.prediction.dtype == torch.bfloat16
+    assert hidden.grad is not None and torch.isfinite(hidden.grad).all()
+    assert actions.grad is not None and torch.isfinite(actions.grad).all()

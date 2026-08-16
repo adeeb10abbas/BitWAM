@@ -130,8 +130,18 @@ class LatentWorldModelHead(nn.Module):
         if actions.shape[0] != action_hidden_states.shape[0]:
             raise ValueError("action hidden states and actions must have the same batch size")
 
-        policy_state = self.state_norm(action_hidden_states.mean(dim=1))
-        action_state = self.action_encoder(actions.flatten(start_dim=1))
+        # The native BitVLA backbone can expose FP32 hidden states after its
+        # residual/norm path even when the head itself is intentionally BF16.
+        # Make that precision boundary explicit instead of relying on an
+        # ambient autocast context (the training wrapper calls the world head
+        # outside the backbone's autocast region).
+        compute_dtype = self.state_norm.weight.dtype
+        policy_state = self.state_norm(
+            action_hidden_states.mean(dim=1).to(dtype=compute_dtype)
+        )
+        action_state = self.action_encoder(
+            actions.flatten(start_dim=1).to(dtype=compute_dtype)
+        )
         return self.predictor(torch.cat((policy_state, action_state), dim=-1))
 
     def forward(

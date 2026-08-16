@@ -1,0 +1,53 @@
+architecture: bitvla
+config_revision: pending
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+stage: w2a8_integer_kernel_recovery
+seed: 0
+num_processes: 4
+
+# Short recovery against the exact deployment operation order. Both vision and
+# text BitLinear layers execute INT8 x ternary -> INT32 during forward, while
+# BF16 master weights receive straight-through gradients.
+freeze_policy: false
+w2a8_qat_semantics: true
+w2a8_qat_activation_backend: triton
+w2a8_qat_scope: all
+world_loss_weight: 0.1
+world_contrastive_weight: 1.0
+world_contrastive_margin: 0.05
+world_learning_rate: 0.00002
+world_hidden_dim: 2048
+world_action_embedding_dim: 256
+world_head_precision: ternary
+world_action_mode: normal
+world_checkpoint: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain--107000_chkpt/world_model--107000_checkpoint.pt
+save_backbone: true
+metrics_path: /data/users/ali/bitvla_runs/bitwam-w2a8-kernel-recovery/metrics.jsonl
+
+output_dir: /data/users/ali/bitvla_runs/bitwam-w2a8-kernel-recovery
+run_id: bitvla-world-w2a8-kernel-recovery-libero10-seed0
+
+vla_path: /data/users/ali/bitvla_runs/bitwam-droid-libero-posttrain--107000_chkpt
+data_root_dir: /data/users/ali/bitvla_data/modified_libero_rlds
+dataset_name: libero_10_no_noops
+run_root_dir: /data/users/ali/bitvla_runs
+run_id_override: bitwam-w2a8-kernel-recovery
+resume: true
+resume_step: 107000
+use_l1_regression: true
+use_lora: false
+num_images_in_input: 2
+use_proprio: true
+batch_size: 8
+grad_accumulation_steps: 4
+learning_rate: 0.000002
+lr_vit: 0.000001
+warmup_steps: 100
+max_steps: 108000
+save_freq: 500
+save_latest_checkpoint_only: false
+shuffle_buffer_size: 10000
+image_aug: true
+wandb_log_freq: 10
+use_wandb: false

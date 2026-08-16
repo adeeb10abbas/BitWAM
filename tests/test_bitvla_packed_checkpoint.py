@@ -42,6 +42,23 @@ class FakePolicy(nn.Module):
         self.fallback = nn.Linear(5, 3, bias=False, dtype=torch.bfloat16)
 
 
+class AlignedPolicy(nn.Module):
+    def __init__(self) -> None:
+        super().__init__()
+        self.ternary = BitLinear(16, 4)
+
+
+class TiedPolicy(FakePolicy):
+    def __init__(self) -> None:
+        super().__init__()
+        self.embedding = nn.Embedding(7, 5, dtype=torch.bfloat16)
+        self.lm_head = nn.Linear(5, 7, bias=False, dtype=torch.bfloat16)
+        self.tie_weights()
+
+    def tie_weights(self) -> None:
+        self.lm_head.weight = self.embedding.weight
+
+
 class MetaRotary(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -91,6 +108,7 @@ def test_export_and_direct_load_reconstructs_packed_and_fallback_state(tmp_path:
     assert source.ternary.q_weight.dtype == torch.uint8
     assert manifest.payload["schema_version"] == PACKED_CHECKPOINT_SCHEMA_VERSION
     assert manifest.packed_layers[0]["weight_shape"] == [3, 5]
+    assert manifest.packed_layers[0]["packed_layout"] == "row_major"
     assert read_packed_checkpoint_manifest(artifact).source_metadata["source_revision"] == "abc123"
 
     loaded = _dense_policy()
@@ -101,6 +119,7 @@ def test_export_and_direct_load_reconstructs_packed_and_fallback_state(tmp_path:
     assert tuple(loaded.ternary.orig_shape) == (3, 5)
     assert loaded.ternary.n_elems == 15
     assert loaded.ternary.enable_qlora is True
+    assert loaded.ternary.packed_layout == "row_major"
     assert torch.equal(loaded.ternary.q_weight, source.ternary.q_weight)
     assert torch.equal(loaded.fallback.weight, original_fallback)
 
@@ -137,6 +156,34 @@ def test_load_or_export_skips_dense_loader_when_artifact_exists(tmp_path: Path) 
     assert created is False
     assert loaded.ternary.weight is None
     assert isinstance(loaded.ternary.q_weight, torch.Tensor)
+
+
+def test_dp4a_layout_is_persisted_and_restored_without_dense_weights(tmp_path: Path) -> None:
+    artifact = tmp_path / "policy.bitwam-dp4a"
+    source = AlignedPolicy()
+
+    manifest = export_packed_checkpoint(source, artifact, packed_layout="dp4a")
+
+    assert manifest.packing["packed_layout"] == "dp4a"
+    assert manifest.packed_layers[0]["packed_layout"] == "dp4a"
+    loaded = AlignedPolicy()
+    load_packed_checkpoint(loaded, artifact)
+    assert loaded.ternary.weight is None
+    assert loaded.ternary.packed_layout == "dp4a"
+    assert torch.equal(loaded.ternary.q_weight, source.ternary.q_weight)
+
+
+def test_export_and_assign_load_preserve_tied_tensor_storage(tmp_path: Path) -> None:
+    artifact = tmp_path / "tied-policy.bitwam-packed"
+    manifest = export_packed_checkpoint(TiedPolicy(), artifact)
+
+    assert manifest.payload["tensor_aliases"] == {
+        "lm_head.weight": "embedding.weight"
+    }
+    loaded = TiedPolicy().to(device="meta")
+    load_packed_checkpoint(loaded, artifact)
+
+    assert loaded.embedding.weight.data_ptr() == loaded.lm_head.weight.data_ptr()
 
 
 def test_load_rejects_shape_mismatch_before_replacing_dense_target(tmp_path: Path) -> None:

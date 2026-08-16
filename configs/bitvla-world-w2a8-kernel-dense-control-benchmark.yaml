@@ -1,0 +1,17 @@
+architecture: bitvla
+config_revision: pending
+upstream_root: /data/users/ali/BitVLA
+upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
+checkpoint: /data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt
+output_dir: /data/users/ali/bitvla_benchmarks/w2a8-kernel/world-posttrain-102000-dense-cached-control
+run_id: bitwam-world-posttrain-102000-dense-cached-control
+task_suite_name: libero_10
+seed: 0
+benchmark_target: policy
+packed_runtime: false
+dense_runtime_backend: cached_ternary_bf16
+dense_runtime_scope: all
+validate_dense_output: true
+require_exact_dense_output: true
+benchmark_warmup_iterations: 10
+benchmark_iterations: 50

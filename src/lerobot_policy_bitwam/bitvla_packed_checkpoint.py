@@ -27,7 +27,12 @@ from typing import Any
 import torch
 from torch import nn
 
-from lerobot_policy_bitwam.bitvla_packing import PackingReport, _matches_scope, pack_bitlinear_weights
+from lerobot_policy_bitwam.bitvla_packing import (
+    PackingReport,
+    _matches_scope,
+    pack_bitlinear_weights,
+    repack_bitlinear_weights_for_dp4a,
+)
 
 PACKED_CHECKPOINT_FORMAT = "bitwam.bitvla.packed"
 PACKED_CHECKPOINT_SCHEMA_VERSION = 1
@@ -101,6 +106,18 @@ def _tensor_metadata(tensor: torch.Tensor) -> dict[str, Any]:
     }
 
 
+def _tensor_alias_key(tensor: torch.Tensor) -> tuple[Any, ...]:
+    """Identify exact tensor aliases without merging merely overlapping views."""
+    return (
+        str(tensor.device),
+        tensor.untyped_storage().data_ptr(),
+        tensor.storage_offset(),
+        tuple(tensor.shape),
+        tuple(tensor.stride()),
+        tensor.dtype,
+    )
+
+
 def _artifact_paths(path: str | Path) -> tuple[Path, Path, Path]:
     root = Path(path)
     return root, root / _MANIFEST_NAME, root / _TENSORS_NAME
@@ -147,12 +164,22 @@ def _packed_layer_specs(
             raise PackedCheckpointError(
                 f"Packed BitLinear '{name}' has invalid q_weight: expected {expected_bytes} uint8 bytes"
             )
+        packed_layout = str(getattr(candidate, "packed_layout", "row_major"))
+        if packed_layout not in {"row_major", "dp4a"}:
+            raise PackedCheckpointError(
+                f"Packed BitLinear '{name}' has unsupported layout {packed_layout!r}"
+            )
+        if packed_layout == "dp4a" and shape[1] % 16:
+            raise PackedCheckpointError(
+                f"Packed BitLinear '{name}' has a DP4A layout with input width {shape[1]}"
+            )
         specs.append(
             {
                 "module": name,
                 "weight_shape": list(shape),
                 "packed_weight": _state_key(name, "q_weight"),
                 "packed_nbytes": expected_bytes,
+                "packed_layout": packed_layout,
             }
         )
     if not specs:
@@ -237,6 +264,7 @@ def export_packed_checkpoint(
     path: str | Path,
     *,
     scope: str = "all",
+    packed_layout: str = "row_major",
     source_metadata: Mapping[str, Any] | None = None,
     overwrite: bool = False,
 ) -> PackedCheckpointManifest:
@@ -246,6 +274,8 @@ def export_packed_checkpoint(
     ``BitLinear.weight`` parameters have been replaced by packed ``q_weight``
     buffers, just as they are for the inference runtime.
     """
+    if packed_layout not in {"row_major", "dp4a"}:
+        raise ValueError(f"Unsupported packed checkpoint layout: {packed_layout}")
     root, manifest_path, tensors_path = _artifact_paths(path)
     if root.exists() and not root.is_dir():
         raise PackedCheckpointError(f"Packed artifact path is not a directory: {root}")
@@ -261,11 +291,28 @@ def export_packed_checkpoint(
     packing: PackingReport | None = None
     if original_shapes:
         packing = pack_bitlinear_weights(module, scope=scope)
+    if packed_layout == "dp4a":
+        repack_bitlinear_weights_for_dp4a(module)
     specs = _packed_layer_specs(module, original_shapes)
+    if any(spec["packed_layout"] != packed_layout for spec in specs):
+        raise PackedCheckpointError(
+            "Packed module layout does not match the requested artifact layout"
+        )
     state = module.state_dict()
     if any(not isinstance(value, torch.Tensor) for value in state.values()):
         raise PackedCheckpointError("Only tensor-valued module state can be serialized")
-    tensors = {name: value.detach().cpu().contiguous() for name, value in state.items()}
+    tensors: dict[str, torch.Tensor] = {}
+    canonical_tensors: dict[tuple[Any, ...], str] = {}
+    tensor_aliases: dict[str, str] = {}
+    for name, value in state.items():
+        alias_key = _tensor_alias_key(value)
+        canonical_name = canonical_tensors.get(alias_key)
+        if canonical_name is not None:
+            tensors[name] = tensors[canonical_name]
+            tensor_aliases[name] = canonical_name
+            continue
+        tensors[name] = value.detach().cpu().contiguous()
+        canonical_tensors[alias_key] = name
     tensor_manifest = {name: _tensor_metadata(value) for name, value in tensors.items()}
 
     packed_keys = {spec["packed_weight"] for spec in specs}
@@ -278,8 +325,12 @@ def export_packed_checkpoint(
         "tensors_file": _TENSORS_NAME,
         "tensors_sha256": _sha256_file(tensors_path),
         "tensors": tensor_manifest,
+        "tensor_aliases": tensor_aliases,
         "source_metadata": _json_value(dict(source_metadata or {}), name="source_metadata"),
-        "packing": packing.to_dict() if packing is not None else {"scope": scope, "reused": True},
+        "packing": (
+            (packing.to_dict() if packing is not None else {"scope": scope, "reused": True})
+            | {"packed_layout": packed_layout}
+        ),
         "packed_layers": specs,
     }
     _atomic_write_json(manifest_path, manifest)
@@ -316,9 +367,32 @@ def _load_tensor_archive(path: str | Path, manifest: PackedCheckpointManifest) -
             or _sha256_tensor(tensor) != metadata.get("sha256")
         ):
             raise PackedCheckpointError(f"Packed tensor '{name}' does not match its manifest")
+    aliases = manifest.payload.get("tensor_aliases", {})
+    if not isinstance(aliases, dict):
+        raise PackedCheckpointError("Packed manifest tensor_aliases must be an object")
+    for alias, canonical in aliases.items():
+        if (
+            not isinstance(alias, str)
+            or not isinstance(canonical, str)
+            or alias == canonical
+            or alias not in archive
+            or canonical not in archive
+        ):
+            raise PackedCheckpointError("Packed manifest contains an invalid tensor alias")
+        if _tensor_alias_key(archive[alias]) != _tensor_alias_key(archive[canonical]):
+            raise PackedCheckpointError(
+                f"Packed tensor alias '{alias}' does not share storage with '{canonical}'"
+            )
     for spec in manifest.packed_layers:
         key = spec["packed_weight"]
         shape = spec["weight_shape"]
+        layout = str(spec.get("packed_layout", "row_major"))
+        if layout not in {"row_major", "dp4a"}:
+            raise PackedCheckpointError(f"Packed layer '{spec['module']}' has invalid layout")
+        if layout == "dp4a" and int(shape[1]) % 16:
+            raise PackedCheckpointError(
+                f"Packed layer '{spec['module']}' has an invalid DP4A input width"
+            )
         if key not in archive or archive[key].dtype != torch.uint8:
             raise PackedCheckpointError(f"Packed layer '{spec['module']}' has no uint8 q_weight")
         if archive[key].numel() != (int(shape[0]) * int(shape[1]) + 3) // 4:
@@ -375,7 +449,7 @@ def _prepare_target_for_packed_state(
             raise PackedCheckpointError(
                 f"Packed layer '{name}' shape mismatch: artifact {expected_shape}, target {current_shape}"
             )
-        targets.append((target, spec, archive[str(spec["packed_weight"]) ]))
+        targets.append((target, spec, archive[str(spec["packed_weight"])]))
 
     for target, spec, q_weight in targets:
         # Register a correctly shaped placeholder so strict load_state_dict can
@@ -394,6 +468,7 @@ def _prepare_target_for_packed_state(
         # manifest's validated dense matrix shape.
         target.n_elems = target.orig_shape[0] * target.orig_shape[1]
         target.enable_qlora = True
+        target.packed_layout = str(spec.get("packed_layout", "row_major"))
 
 
 def load_packed_checkpoint(
@@ -428,6 +503,15 @@ def load_packed_checkpoint(
         raise PackedCheckpointError(
             f"Packed load was not strict: missing={result.missing_keys}, unexpected={result.unexpected_keys}"
         )
+    tie_weights = getattr(module, "tie_weights", None)
+    if callable(tie_weights):
+        tie_weights()
+    loaded_state = module.state_dict()
+    for alias, canonical in manifest.payload.get("tensor_aliases", {}).items():
+        if _tensor_alias_key(loaded_state[alias]) != _tensor_alias_key(loaded_state[canonical]):
+            raise PackedCheckpointError(
+                f"Target model did not restore tensor alias '{alias}' -> '{canonical}'"
+            )
     return manifest
 
 
@@ -553,6 +637,7 @@ def load_or_export_packed_checkpoint(
     build_model: Callable[[], nn.Module],
     load_dense_weights: Callable[[nn.Module], None],
     scope: str = "all",
+    packed_layout: str = "row_major",
     source_metadata: Mapping[str, Any] | None = None,
 ) -> tuple[nn.Module, PackedCheckpointManifest, bool]:
     """Use an existing artifact or create it once from a dense checkpoint.
@@ -565,11 +650,17 @@ def load_or_export_packed_checkpoint(
         if not (manifest_path.is_file() and tensors_path.is_file()):
             raise PackedCheckpointError(f"Packed artifact at {root} is incomplete")
         model = build_model()
-        return model, load_packed_checkpoint(
+        manifest = load_packed_checkpoint(
             model,
             root,
             expected_source_metadata=source_metadata,
-        ), False
+        )
+        artifact_layout = str(manifest.packing.get("packed_layout", "row_major"))
+        if artifact_layout != packed_layout:
+            raise PackedCheckpointError(
+                f"Packed artifact layout mismatch: requested {packed_layout}, found {artifact_layout}"
+            )
+        return model, manifest, False
 
     model = build_model()
     load_dense_weights(model)
@@ -577,6 +668,7 @@ def load_or_export_packed_checkpoint(
         model,
         root,
         scope=scope,
+        packed_layout=packed_layout,
         source_metadata=source_metadata,
     )
     return model, manifest, True

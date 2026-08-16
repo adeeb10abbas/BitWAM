@@ -24,6 +24,7 @@ from lerobot_policy_bitwam.bitvla_packed_checkpoint import (
     load_packed_checkpoint,
     move_packed_bitvla_to_device,
 )
+from lerobot_policy_bitwam.bitvla_packing import enable_direct_w2a8_bitlinear_runtime
 
 
 def _rss_kib() -> int:
@@ -67,6 +68,21 @@ def main() -> None:
     parser.add_argument("--artifact", type=Path, required=True)
     parser.add_argument("--device", default="cuda:0")
     parser.add_argument("--output-json", type=Path)
+    parser.add_argument(
+        "--packed-layout",
+        choices=("row_major", "dp4a"),
+        default="row_major",
+    )
+    parser.add_argument(
+        "--runtime",
+        choices=("upstream_packed", "triton_w2a8"),
+        default="upstream_packed",
+    )
+    parser.add_argument(
+        "--activation-backend",
+        choices=("torch", "hybrid", "triton"),
+        default="triton",
+    )
     parser.add_argument(
         "--reuse-artifact",
         action="store_true",
@@ -120,6 +136,7 @@ def main() -> None:
         manifest = export_packed_checkpoint(
             dense_model,
             artifact,
+            packed_layout=args.packed_layout,
             source_metadata={
                 "checkpoint": str(checkpoint),
                 "model_config": "config.json",
@@ -142,8 +159,19 @@ def main() -> None:
     torch.cuda.reset_peak_memory_stats()
     packed_started = time.perf_counter()
     packed_model = build_bitvla_topology(checkpoint)
-    load_packed_checkpoint(packed_model, artifact)
+    manifest = load_packed_checkpoint(packed_model, artifact)
+    artifact_layout = str(manifest.packing.get("packed_layout", "row_major"))
+    if artifact_layout != args.packed_layout:
+        raise RuntimeError(
+            f"Packed artifact layout is {artifact_layout}, requested {args.packed_layout}"
+        )
     packed_model = move_packed_bitvla_to_device(packed_model, args.device)
+    runtime_layers = None
+    if args.runtime == "triton_w2a8":
+        runtime_layers = enable_direct_w2a8_bitlinear_runtime(
+            packed_model,
+            activation_backend=args.activation_backend,
+        )
     first_packed_layer = next(
         candidate
         for candidate in packed_model.modules()
@@ -161,6 +189,12 @@ def main() -> None:
     torch.cuda.synchronize()
     packed_metrics = {
         "load_seconds": time.perf_counter() - packed_started,
+        "artifact_layout": artifact_layout,
+        "runtime": args.runtime,
+        "runtime_layers": runtime_layers,
+        "activation_backend": (
+            args.activation_backend if args.runtime == "triton_w2a8" else None
+        ),
         "cuda_allocated_bytes": torch.cuda.memory_allocated(),
         "cuda_peak_bytes": torch.cuda.max_memory_allocated(),
         "max_rss_kib": _rss_kib(),

@@ -22,6 +22,7 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
         enable_compiled_bitlinear_projection,
         enable_compiled_bitlinear_runtime,
         enable_compiled_bitlinear_unpack,
+        enable_direct_w2a8_bitlinear_runtime,
         enable_torch_int8_bitlinear_runtime,
         enable_triton_direct_bitlinear_runtime,
         pack_bitlinear_weights,
@@ -30,13 +31,72 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
     original_initialize = evaluator.initialize_model
 
     def initialize_packed(cfg: Any) -> tuple[Any, ...]:
-        components = original_initialize(cfg)
-        model = components[0]
-        report = pack_bitlinear_weights(
-            model,
-            scope=str(config.get("packed_scope", "all")),
-        ).to_dict()
         backend = str(config.get("packed_runtime_backend", "compiled_unpack"))
+        artifact = config.get("packed_artifact")
+        if artifact is not None:
+            if backend != "triton_w2a8":
+                raise ValueError("Direct packed artifacts currently require triton_w2a8")
+            if not hasattr(evaluator, "get_model"):
+                raise RuntimeError("Upstream evaluator does not expose its get_model loader")
+            from lerobot_policy_bitwam.bitvla_packed_checkpoint import (
+                build_bitvla_topology,
+                load_packed_checkpoint,
+                move_packed_bitvla_to_device,
+            )
+
+            source_checkpoint = Path(_required(config, "checkpoint")).expanduser().resolve()
+            artifact_path = Path(artifact).expanduser().resolve()
+            original_get_model = evaluator.get_model
+            loaded: dict[str, Any] = {}
+
+            def get_packed_model(_cfg: Any) -> Any:
+                model = build_bitvla_topology(source_checkpoint)
+                manifest = load_packed_checkpoint(
+                    model,
+                    artifact_path,
+                    expected_source_metadata={"checkpoint": str(source_checkpoint)},
+                )
+                if manifest.packing.get("packed_layout", "row_major") != "dp4a":
+                    raise RuntimeError("Production W2A8 artifacts must use the DP4A layout")
+                statistics_path = source_checkpoint / "dataset_statistics.json"
+                if not statistics_path.is_file():
+                    raise RuntimeError(
+                        "Direct packed evaluation requires dataset_statistics.json beside "
+                        "the source checkpoint"
+                    )
+                norm_stats = json.loads(statistics_path.read_text(encoding="utf-8"))
+                if not isinstance(norm_stats, dict) or not norm_stats:
+                    raise RuntimeError("Packed evaluation dataset statistics are invalid")
+                model.norm_stats = norm_stats
+                loaded["manifest"] = manifest
+                return move_packed_bitvla_to_device(
+                    model,
+                    str(config.get("packed_device", "cuda:0")),
+                )
+
+            evaluator.get_model = get_packed_model
+            try:
+                components = original_initialize(cfg)
+            finally:
+                evaluator.get_model = original_get_model
+            manifest = loaded.get("manifest")
+            if manifest is None:
+                raise RuntimeError("Upstream initialization did not invoke the packed model loader")
+            model = components[0]
+            report = manifest.packing
+            report["packed_layers"] = len(manifest.packed_layers)
+            report["artifact"] = str(artifact_path)
+            report["artifact_bytes"] = sum(
+                path.stat().st_size for path in artifact_path.rglob("*") if path.is_file()
+            )
+            report["direct_artifact_load"] = True
+        else:
+            components = original_initialize(cfg)
+            model = components[0]
+            report = pack_bitlinear_weights(
+                model,
+                scope=str(config.get("packed_scope", "all")),
+            ).to_dict()
         if backend == "compiled_unpack":
             report["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
         elif backend == "compiled_projection":
@@ -45,6 +105,17 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
             report["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
         elif backend == "torch_int8":
             report["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
+        elif backend == "triton_w2a8":
+            direct_activation = str(config.get("packed_activation_backend", "hybrid"))
+            small_batch_threshold = int(config.get("packed_small_batch_threshold", 8))
+            report["triton_w2a8_layers"] = enable_direct_w2a8_bitlinear_runtime(
+                model,
+                activation_backend=direct_activation,
+                small_batch_threshold=small_batch_threshold,
+            )
+            report["activation_backend"] = direct_activation
+            report["small_batch_threshold"] = small_batch_threshold
+            report["packed_layout"] = "dp4a"
         elif backend in {"triton_direct_int8", "triton_direct_bf16"}:
             direct_activation = str(config.get("packed_activation_backend", "torch"))
             report["triton_direct_layers"] = enable_triton_direct_bitlinear_runtime(
@@ -56,6 +127,7 @@ def _enable_packed_runtime(evaluator: ModuleType, config: dict[str, Any]) -> Non
         elif backend != "eager_unpack":
             raise ValueError(f"Unsupported packed_runtime_backend: {backend}")
         report["backend"] = backend
+        evaluator._bitwam_packing_report = dict(report)
         print("BitWAM packed runtime: " + json.dumps(report, sort_keys=True))
         return components
 

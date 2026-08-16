@@ -16,11 +16,13 @@ from typing import Any
 import numpy as np
 import torch
 
-from lerobot_policy_bitwam.bitvla_evaluate import _load_upstream_evaluator
+from lerobot_policy_bitwam.bitvla_evaluate import _enable_packed_runtime, _load_upstream_evaluator
 from lerobot_policy_bitwam.bitvla_packing import (
+    enable_cached_dense_bitlinear_runtime,
     enable_compiled_bitlinear_projection,
     enable_compiled_bitlinear_runtime,
     enable_compiled_bitlinear_unpack,
+    enable_direct_w2a8_bitlinear_runtime,
     enable_torch_int8_bitlinear_runtime,
     enable_triton_direct_bitlinear_runtime,
     pack_bitlinear_weights,
@@ -147,8 +149,19 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     checkpoint = Path(_required(config, "checkpoint"))
     warmup = int(config.get("benchmark_warmup_iterations", 10))
     iterations = int(config.get("benchmark_iterations", 50))
+    packed_runtime = bool(config.get("packed_runtime", False))
+    packed_artifact = config.get("packed_artifact")
     if warmup < 1 or iterations < 1:
         raise ValueError("benchmark warmup and timed iterations must be positive")
+    if packed_artifact is not None:
+        if not packed_runtime:
+            raise ValueError("packed_artifact requires packed_runtime: true")
+        if bool(config.get("validate_packed_output", False)):
+            raise ValueError(
+                "A direct packed-artifact benchmark cannot validate against a dense model "
+                "in the same fresh-load process"
+            )
+        _enable_packed_runtime(evaluator, config)
 
     evaluator.set_seed_everywhere(int(config.get("seed", 0)))
     cfg = evaluator.GenerateConfig(
@@ -195,36 +208,54 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
         return np.asarray(actions)
 
     packing = None
+    dense_runtime = None
     correctness = None
     dense_actions = None
     dense_repeat_actions = None
-    if bool(config.get("packed_runtime", False)):
-        if bool(config.get("validate_packed_output", False)):
-            dense_actions = query()
-            dense_repeat_actions = query()
-        packing = pack_bitlinear_weights(
-            model,
-            scope=str(config.get("packed_scope", "all")),
-        ).to_dict()
+    dense_runtime_backend = str(config.get("dense_runtime_backend", "upstream_dynamic"))
+    if packed_runtime and dense_runtime_backend != "upstream_dynamic":
+        raise ValueError("packed_runtime and a non-default dense_runtime_backend are mutually exclusive")
+    if packed_runtime:
         packed_backend = str(config.get("packed_runtime_backend", "eager_unpack"))
-        if packed_backend == "compiled_unpack":
-            packing["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
-        elif packed_backend == "compiled_projection":
-            packing["compiled_projection_layers"] = enable_compiled_bitlinear_projection(model)
-        elif packed_backend == "compiled":
-            packing["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
-        elif packed_backend == "torch_int8":
-            packing["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
-        elif packed_backend in {"triton_direct_int8", "triton_direct_bf16"}:
-            direct_activation = str(config.get("packed_activation_backend", "torch"))
-            packing["triton_direct_layers"] = enable_triton_direct_bitlinear_runtime(
+        if packed_artifact is not None:
+            packing = dict(evaluator._bitwam_packing_report)
+        else:
+            if bool(config.get("validate_packed_output", False)):
+                dense_actions = query()
+                dense_repeat_actions = query()
+            packing = pack_bitlinear_weights(
                 model,
-                activation_backend=direct_activation,
-                bf16_candidate=packed_backend == "triton_direct_bf16",
-            )
-            packing["activation_backend"] = direct_activation
-        elif packed_backend != "eager_unpack":
-            raise ValueError(f"Unsupported packed_runtime_backend: {packed_backend}")
+                scope=str(config.get("packed_scope", "all")),
+            ).to_dict()
+            if packed_backend == "compiled_unpack":
+                packing["compiled_unpack_layers"] = enable_compiled_bitlinear_unpack(model)
+            elif packed_backend == "compiled_projection":
+                packing["compiled_projection_layers"] = enable_compiled_bitlinear_projection(model)
+            elif packed_backend == "compiled":
+                packing["compiled_layers"] = enable_compiled_bitlinear_runtime(model)
+            elif packed_backend == "torch_int8":
+                packing["torch_int8_layers"] = enable_torch_int8_bitlinear_runtime(model)
+            elif packed_backend == "triton_w2a8":
+                direct_activation = str(config.get("packed_activation_backend", "hybrid"))
+                small_batch_threshold = int(config.get("packed_small_batch_threshold", 8))
+                packing["triton_w2a8_layers"] = enable_direct_w2a8_bitlinear_runtime(
+                    model,
+                    activation_backend=direct_activation,
+                    small_batch_threshold=small_batch_threshold,
+                )
+                packing["activation_backend"] = direct_activation
+                packing["small_batch_threshold"] = small_batch_threshold
+                packing["packed_layout"] = "dp4a"
+            elif packed_backend in {"triton_direct_int8", "triton_direct_bf16"}:
+                direct_activation = str(config.get("packed_activation_backend", "torch"))
+                packing["triton_direct_layers"] = enable_triton_direct_bitlinear_runtime(
+                    model,
+                    activation_backend=direct_activation,
+                    bf16_candidate=packed_backend == "triton_direct_bf16",
+                )
+                packing["activation_backend"] = direct_activation
+            elif packed_backend != "eager_unpack":
+                raise ValueError(f"Unsupported packed_runtime_backend: {packed_backend}")
         packing["backend"] = packed_backend
         if dense_actions is not None:
             packed_actions = query()
@@ -269,6 +300,48 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
                 )
         gc.collect()
         torch.cuda.empty_cache()
+    elif dense_runtime_backend == "cached_ternary_bf16":
+        if bool(config.get("validate_dense_output", True)):
+            dense_actions = query()
+            dense_repeat_actions = query()
+        cached_layers = enable_cached_dense_bitlinear_runtime(
+            model,
+            scope=str(config.get("dense_runtime_scope", "all")),
+        )
+        dense_runtime = {
+            "backend": dense_runtime_backend,
+            "scope": str(config.get("dense_runtime_scope", "all")),
+            "cached_layers": cached_layers,
+            "weight_dtype": "torch.bfloat16",
+        }
+        if dense_actions is not None:
+            cached_actions = query()
+            difference = np.abs(cached_actions.astype(np.float64) - dense_actions.astype(np.float64))
+            dense_repeat_difference = np.abs(
+                dense_repeat_actions.astype(np.float64) - dense_actions.astype(np.float64)
+            )
+            correctness = {
+                "shape": list(dense_actions.shape),
+                "dense_repeat_exact_match": bool(np.array_equal(dense_repeat_actions, dense_actions)),
+                "dense_repeat_max_absolute_error": float(dense_repeat_difference.max(initial=0)),
+                "exact_match": bool(np.array_equal(cached_actions, dense_actions)),
+                "allclose_atol_1e-4": bool(
+                    np.allclose(cached_actions, dense_actions, rtol=1e-4, atol=1e-4)
+                ),
+                "max_absolute_error": float(difference.max(initial=0)),
+                "mean_absolute_error": float(difference.mean()),
+            }
+            if bool(config.get("require_exact_dense_output", True)) and not correctness[
+                "exact_match"
+            ]:
+                raise RuntimeError(
+                    "Cached dense runtime failed exact-action validation: "
+                    f"max_absolute_error={correctness['max_absolute_error']}"
+                )
+        gc.collect()
+        torch.cuda.empty_cache()
+    elif dense_runtime_backend != "upstream_dynamic":
+        raise ValueError(f"Unsupported dense_runtime_backend: {dense_runtime_backend}")
 
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - load_started
@@ -292,6 +365,8 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
     latency = summarize_latencies(latencies_ms)
     latency["action_chunks_per_second_at_p50"] = 1000 / float(latency["p50_ms"])
     latency["control_steps_per_second_at_p50"] = 8000 / float(latency["p50_ms"])
+    if packing is not None and packing.get("backend") == "triton_w2a8":
+        packing["decoded_weight_cache_bytes"] = 0
     artifacts = deployment_artifacts(checkpoint)
     world_files = sorted(checkpoint.glob("world_model--*_checkpoint.pt"))
     optimizer_files = sorted(checkpoint.glob("optimizer--*_checkpoint.pt"))
@@ -311,8 +386,10 @@ def _benchmark_policy(config: dict[str, Any]) -> dict[str, Any]:
             ),
             "input": "fixed seeded 224x224 RGB main/wrist images and zero proprioception",
             "packed_runtime": packing is not None,
+            "dense_runtime_backend": dense_runtime_backend,
         },
         "packing": packing,
+        "dense_runtime": dense_runtime,
         "correctness": correctness,
         "load_seconds": load_seconds,
         "latency": latency,

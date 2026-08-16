@@ -24,6 +24,17 @@ RUNS = {
     "no_mid_posttrain": "bitwam-droid-pretrain-libero-posttrain/metrics.jsonl",
 }
 
+SYSTEM_ENDPOINT_FIELDS = (
+    "micro_step",
+    "elapsed_forward_seconds",
+    "global_examples_seen",
+    "global_examples_per_second",
+)
+SYSTEM_PEAK_FIELDS = (
+    "cuda_max_memory_allocated_bytes",
+    "cuda_max_memory_reserved_bytes",
+)
+
 
 def _read_rows(path: Path) -> list[dict]:
     rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line]
@@ -34,6 +45,18 @@ def _read_rows(path: Path) -> list[dict]:
             if isinstance(value, (int, float)) and not math.isfinite(float(value)):
                 raise ValueError(f"non-finite metric {key} in {path}")
     return rows
+
+
+def _summarize_systems(rows: list[dict]) -> dict:
+    """Extract directly comparable run-local throughput and allocator evidence."""
+    summary = {
+        key: rows[-1][key] for key in SYSTEM_ENDPOINT_FIELDS if key in rows[-1]
+    }
+    for key in SYSTEM_PEAK_FIELDS:
+        values = [row[key] for row in rows if key in row]
+        if values:
+            summary[key] = max(values)
+    return summary
 
 
 def summarize(run_root: Path) -> dict:
@@ -50,6 +73,7 @@ def summarize(run_root: Path) -> dict:
                 "rows": len(rows),
                 "first": rows[0],
                 "last": rows[-1],
+                "systems": _summarize_systems(rows),
             }
 
     gates: dict[str, dict] = {

@@ -61,3 +61,37 @@ def test_summary_rejects_nonfinite_metrics(tmp_path: Path) -> None:
     _write(tmp_path, module.RUNS["pretrain"], {"world_loss": float("nan")})
     with pytest.raises(ValueError, match="non-finite"):
         module.summarize(tmp_path)
+
+
+def test_summary_records_endpoint_throughput_and_observed_peak(tmp_path: Path) -> None:
+    module = _module()
+    _write(
+        tmp_path,
+        module.RUNS["pretrain"],
+        {
+            "micro_step": 10,
+            "elapsed_forward_seconds": 4.0,
+            "global_examples_seen": 320,
+            "global_examples_per_second": 80.0,
+            "cuda_max_memory_allocated_bytes": 100,
+            "cuda_max_memory_reserved_bytes": 120,
+        },
+        {
+            "micro_step": 20,
+            "elapsed_forward_seconds": 7.0,
+            "global_examples_seen": 640,
+            "global_examples_per_second": 91.4,
+            "cuda_max_memory_allocated_bytes": 90,
+            "cuda_max_memory_reserved_bytes": 130,
+        },
+    )
+
+    systems = module.summarize(tmp_path)["runs"]["pretrain"]["systems"]
+    assert systems == {
+        "micro_step": 20,
+        "elapsed_forward_seconds": 7.0,
+        "global_examples_seen": 640,
+        "global_examples_per_second": 91.4,
+        "cuda_max_memory_allocated_bytes": 100,
+        "cuda_max_memory_reserved_bytes": 130,
+    }

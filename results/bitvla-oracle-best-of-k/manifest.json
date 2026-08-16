@@ -1,0 +1,69 @@
+{
+  "run_id": "bitvla-oracle-best-of-k",
+  "status": "completed",
+  "date": "2026-08-16",
+  "question": "Does exact one-action-chunk best-of-K selection provide enough closed-loop benefit to justify a learned Q selector?",
+  "code_revision": "945c994",
+  "config": "configs/bitvla-oracle-libero10.yaml",
+  "policy": {
+    "architecture": "native BitVLA with ternary BitWAM world head",
+    "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+    "bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7"
+  },
+  "evaluation": {
+    "task_suite": "libero_10",
+    "task_count": 10,
+    "episodes_per_task": 5,
+    "total_episodes_per_condition": 50,
+    "seed": 7,
+    "candidate_counts": [1, 4, 16],
+    "base_candidate": "exact eight-action BitVLA chunk",
+    "other_candidates": "temporally smoothed Gaussian perturbations in six continuous action dimensions",
+    "noise_scale_times_training_action_std": 0.15,
+    "action_clip_quantiles": [0.01, 0.99],
+    "gripper": "unchanged from the base candidate",
+    "candidate_nesting": "fixed per-episode RNG makes lower-K candidates a prefix of higher-K candidates",
+    "selector": "maximum exact LIBERO goal predicates satisfied after one eight-action chunk",
+    "tie_break": "retain the earliest candidate, so equal scores retain the base action",
+    "branch_isolation": "camera-free MuJoCo ControlEnv in a separate spawned process",
+    "control_observations": "normal camera observations in the main environment"
+  },
+  "hardware": {
+    "total_gpus": 10,
+    "gpu_inventory": {
+      "NVIDIA A100-SXM4-80GB": 8,
+      "NVIDIA A100-SXM4-40GB": 2
+    },
+    "driver": "580.95.05",
+    "task_to_pod_and_gpu": {
+      "0": ["lerobot-2-ali", 0],
+      "1": ["lerobot-2-ali", 1],
+      "2": ["lerobot-3-ali", 0],
+      "3": ["lerobot-3-ali", 1],
+      "4": ["lerobot-8-ali", 0],
+      "5": ["lerobot-9-ali", 0],
+      "6": ["lerobot-10-ali", 0],
+      "7": ["lerobot-11-ali", 0],
+      "8": ["lerobot-12-ali", 0],
+      "9": ["lerobot-13-ali", 0]
+    },
+    "pairing_control": "Each task used the same physical GPU for K=1, K=4, and K=16."
+  },
+  "software": {
+    "python_environment": "/data/users/ali/BitVLA/.venv",
+    "torch": "2.9.1+cu128",
+    "cuda": "12.8",
+    "numpy": "1.26.4"
+  },
+  "artifacts": {
+    "compact_metrics": "results/bitvla-oracle-best-of-k/metrics.json",
+    "raw_results_outside_git": "/data/users/ali/bitvla_oracle/final/k{1,4,16}/task{0..9}.json",
+    "logs_outside_git": "/data/users/ali/bitvla_oracle/logs/final/k{1,4,16}/task{0..9}.log"
+  },
+  "quality_controls": [
+    "K=1 performs no branch simulation.",
+    "Counterfactual simulation is process-isolated from the control environment and random state.",
+    "Earlier in-process and rendered-worker diagnostic runs were archived and excluded.",
+    "All ten task shards completed for every reported condition."
+  ]
+}

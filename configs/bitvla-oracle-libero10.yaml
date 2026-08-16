@@ -3,9 +3,9 @@ upstream_root: /data/users/ali/BitVLA
 upstream_revision: 8afac0260b3748b14657a69ec58e3d9f0d6da3a7
 checkpoint: /data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt
 task_suite_name: libero_10
-task_ids: [0]
-trials_per_task: 1
-candidate_count: 4
+task_ids: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+trials_per_task: 5
+candidate_count: 1
 noise_scale: 0.15
 seed: 7
-output_path: /data/users/ali/bitvla_oracle/smoke-k4-task0.json
+output_path: /data/users/ali/bitvla_oracle/final/k1/all-tasks.json

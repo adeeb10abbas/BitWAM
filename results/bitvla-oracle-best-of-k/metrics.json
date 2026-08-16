@@ -1,0 +1,102 @@
+{
+  "conditions": {
+    "k1": {
+      "candidate_count": 1,
+      "successes": 46,
+      "episodes": 50,
+      "success_rate": 0.92,
+      "per_task_successes": [4, 5, 5, 5, 5, 5, 5, 5, 2, 5],
+      "strict_progress_selections": 0,
+      "decisions": 1672,
+      "candidate_chunks_scored": 0,
+      "branch_simulator_steps": 0,
+      "control_steps": 13690,
+      "final_goal_predicates_satisfied": 96,
+      "final_goal_predicates_total": 100,
+      "sum_shard_seconds": 923.370819568634,
+      "max_shard_seconds": 131.23214149475098,
+      "relative_max_shard_time": 1.0
+    },
+    "k4": {
+      "candidate_count": 4,
+      "successes": 45,
+      "episodes": 50,
+      "success_rate": 0.9,
+      "per_task_successes": [4, 5, 5, 5, 5, 5, 5, 4, 2, 5],
+      "strict_progress_selections": 28,
+      "strict_progress_selection_rate_per_decision": 0.01643192488262911,
+      "decisions": 1704,
+      "candidate_chunks_scored": 6816,
+      "branch_simulator_steps": 54528,
+      "control_steps": 13927,
+      "final_goal_predicates_satisfied": 93,
+      "final_goal_predicates_total": 100,
+      "sum_shard_seconds": 1999.3680438995361,
+      "max_shard_seconds": 289.6915092468262,
+      "relative_max_shard_time": 2.2074737632656345
+    },
+    "k16": {
+      "candidate_count": 16,
+      "successes": 47,
+      "episodes": 50,
+      "success_rate": 0.94,
+      "per_task_successes": [5, 5, 5, 5, 5, 5, 4, 5, 3, 5],
+      "strict_progress_selections": 28,
+      "strict_progress_selection_rate_per_decision": 0.016766467065868262,
+      "decisions": 1670,
+      "candidate_chunks_scored": 26720,
+      "branch_simulator_steps": 213760,
+      "control_steps": 13678,
+      "final_goal_predicates_satisfied": 97,
+      "final_goal_predicates_total": 100,
+      "sum_shard_seconds": 4063.6113827228546,
+      "max_shard_seconds": 602.953287601471,
+      "relative_max_shard_time": 4.594554967508382
+    }
+  },
+  "paired_comparisons": {
+    "k4_minus_k1": {
+      "difference_successes": -1,
+      "difference_percentage_points": -2.0,
+      "paired_bootstrap_95_ci_percentage_points": [-8.0, 4.0],
+      "discordant_rescues": 1,
+      "discordant_harms": 2,
+      "exact_mcnemar_p": 1.0
+    },
+    "k16_minus_k1": {
+      "difference_successes": 1,
+      "difference_percentage_points": 2.0,
+      "paired_bootstrap_95_ci_percentage_points": [-4.0, 10.0],
+      "discordant_rescues": 2,
+      "discordant_harms": 1,
+      "exact_mcnemar_p": 1.0
+    },
+    "k16_minus_k4": {
+      "difference_successes": 2,
+      "difference_percentage_points": 4.0,
+      "paired_bootstrap_95_ci_percentage_points": [-4.0, 12.0],
+      "discordant_rescues": 3,
+      "discordant_harms": 1,
+      "exact_mcnemar_p": 0.625
+    }
+  },
+  "mechanistic_audit": {
+    "k16_rescue_with_strict_selection": [[0, 2]],
+    "k16_harm_with_strict_selection": [[6, 4]],
+    "k16_rescue_without_any_strict_selection": [[8, 4]],
+    "k4_harm_with_strict_selection": [[7, 1]],
+    "k4_flips_without_any_strict_selection": [[8, 1], [8, 4]],
+    "interpretation": "Candidate-associated K=16 endpoint flips net to zero; flips with no candidate substitution expose evaluator nondeterminism."
+  },
+  "repeatability_reference": {
+    "same_checkpoint_prior_successes": 45,
+    "same_checkpoint_prior_episodes": 50,
+    "source": "results/native-bitvla-seed0-50/metrics.json"
+  },
+  "bootstrap": {
+    "replicates": 100000,
+    "seed": 0,
+    "unit": "paired task and initial-state index",
+    "interval": "percentile"
+  }
+}

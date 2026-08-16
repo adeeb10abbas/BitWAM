@@ -76,8 +76,9 @@ The primary run was moved without changing its training configuration to a
 micro-step 10 recorded finite action L1 0.344336, world loss 0.984455, future
 cosine 0.015545, a positive conditioning gap of `5.29e-5`, 31.82 examples/s,
 and peak rank-0 CUDA allocation/reservation of 15,112,216,064 and
-22,951,231,488 bytes. At micro-step 730, forward throughput had warmed to
-97.53 examples/s and the cgroup still recorded zero OOM events. These are live
+22,951,231,488 bytes. At micro-step 5,020, forward throughput had warmed to
+100.19 examples/s, future cosine was 0.870489, the conditioning gap was
+`1.08e-4`, and the cgroup still recorded zero OOM events. These are live
 training diagnostics, not final quality measurements.
 
 The first holdout-normalization implementation inserted the pinned statistics

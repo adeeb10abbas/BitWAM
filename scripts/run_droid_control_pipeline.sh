@@ -201,12 +201,22 @@ run_eval() {
 
 zero_pipeline() {
   local zero_checkpoint="${RUN_ROOT}/bitwam-droid-pretrain-zero-action--120000_chkpt"
-  wait_for_checkpoint \
-    "${zero_checkpoint}" "${LOG_ROOT}/bitvla-droid-zero-pretrain.pid" \
-    "zero-action Stage P"
+  local zero_world_size="${BITWAM_ZERO_WORLD_SIZE:-1}"
+  if [[ "${BITWAM_EXTERNAL_FIRST_STAGE:-0}" == 1 ]]; then
+    while [[ ! -f "${zero_checkpoint}/bitwam_manifest.json" ]]; do
+      log "waiting for externally supervised zero-action Stage P"
+      sleep 30
+    done
+  else
+    wait_for_checkpoint \
+      "${zero_checkpoint}" "${LOG_ROOT}/bitvla-droid-zero-pretrain.pid" \
+      "zero-action Stage P"
+  fi
   validate_checkpoint \
     "${zero_checkpoint}" droid_frozen_world_pretrain_zero_action 120000
-  validate_metrics "${RUN_ROOT}/bitwam-droid-pretrain-zero-action/metrics.jsonl" 1
+  validate_metrics \
+    "${RUN_ROOT}/bitwam-droid-pretrain-zero-action/metrics.jsonl" \
+    "${zero_world_size}"
 
   run_holdout \
     "zero-action-pretrained holdout" \
@@ -258,14 +268,28 @@ action_pipeline() {
     "${EVAL_ROOT}/bitvla-action-only-droid-libero-107000-10" \
     "${LOG_ROOT}/bitvla-action-only-eval-10.log"
 
-  run_training \
-    "shuffled-action Stage P" \
-    bitvla-world-pretrain-droid-shuffled-action.yaml 1 \
-    "${RUN_ROOT}/bitwam-droid-pretrain-shuffled-action" \
-    "${RUN_ROOT}/bitwam-droid-pretrain-shuffled-action--120000_chkpt" \
-    droid_frozen_world_pretrain_shuffled_action 120000 \
-    "${LOG_ROOT}/bitvla-droid-shuffled-pretrain.log" \
-    "${LOG_ROOT}/bitvla-droid-shuffled-pretrain.pid"
+  local shuffled_checkpoint="${RUN_ROOT}/bitwam-droid-pretrain-shuffled-action--120000_chkpt"
+  local shuffled_world_size="${BITWAM_SHUFFLED_WORLD_SIZE:-1}"
+  if [[ "${BITWAM_EXTERNAL_SHUFFLED:-0}" == 1 ]]; then
+    while [[ ! -f "${shuffled_checkpoint}/bitwam_manifest.json" ]]; do
+      log "waiting for externally supervised shuffled-action Stage P"
+      sleep 30
+    done
+    validate_checkpoint \
+      "${shuffled_checkpoint}" droid_frozen_world_pretrain_shuffled_action 120000
+    validate_metrics \
+      "${RUN_ROOT}/bitwam-droid-pretrain-shuffled-action/metrics.jsonl" \
+      "${shuffled_world_size}"
+  else
+    run_training \
+      "shuffled-action Stage P" \
+      bitvla-world-pretrain-droid-shuffled-action.yaml 1 \
+      "${RUN_ROOT}/bitwam-droid-pretrain-shuffled-action" \
+      "${shuffled_checkpoint}" \
+      droid_frozen_world_pretrain_shuffled_action 120000 \
+      "${LOG_ROOT}/bitvla-droid-shuffled-pretrain.log" \
+      "${LOG_ROOT}/bitvla-droid-shuffled-pretrain.pid"
+  fi
   run_holdout \
     "shuffled-action-pretrained holdout" \
     bitvla-world-eval-droid-holdout-shuffled-pretrain.yaml \

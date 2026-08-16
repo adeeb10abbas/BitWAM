@@ -11,6 +11,8 @@ from pathlib import Path
 
 RUNS = {
     "pretrain": "bitwam-droid-pretrain/metrics.jsonl",
+    "zero_action_pretrain": "bitwam-droid-pretrain-zero-action/metrics.jsonl",
+    "shuffled_action_pretrain": "bitwam-droid-pretrain-shuffled-action/metrics.jsonl",
     "holdout_initialization": "bitwam-droid-holdout-initialization/metrics.jsonl",
     "holdout_pretrain_normal": "bitwam-droid-holdout-pretrain-normal/metrics.jsonl",
     "holdout_pretrain_zero_input": "bitwam-droid-holdout-pretrain-zero/metrics.jsonl",

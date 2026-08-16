@@ -15,8 +15,8 @@ the model interfaces permit it.
 | --- | --- | --- | --- | --- | --- |
 | BitWAM staged | 20k frozen-head | 5k joint | 2k joint/ternary | observed | P running on 4× B200 |
 | BitWAM no-M | 20k frozen-head | none | 2k joint/ternary | observed | pending |
-| Visual-only control | 20k frozen-head | none | matched downstream | zero | P running on 1× A100 |
-| Shuffled-action control | 20k frozen-head | none | none | within-rank permutation | pending |
+| Visual-only control | 20k frozen-head | none | matched downstream | zero | P running on 4× RTX Blackwell |
+| Shuffled-action control | 20k frozen-head | none | none | within-rank permutation | P running on 4× RTX Blackwell |
 | Action-only control | none | 5k action | 2k action | loss weight zero | M running on 2× A100 |
 | Released BitVLA | none | none | none | none | existing reference |
 
@@ -91,14 +91,31 @@ final future cosine was 0.019061, world loss 0.980939, conditioning gap
 allocation 15,044,786,688 bytes.
 
 Two control-launch resource failures are also excluded rather than hidden. The
-original two-rank zero-action job exceeded its 32-GiB pod host-memory limit; its
-replacement uses one A100 with batch 8 and accumulation 32, preserving Stage
-P's global batch of 256. The original action-only job used batch 8 and exceeded
-an 80-GiB A100 during the trainable-controller forward pass; its replacement
-uses two A100s with batch 4 and accumulation 16, preserving its preregistered
-global batch of 128. Both replacements have crossed 80 real micro-steps with
-finite metrics. Failed directories and logs remain archived with their failure
-class and timestamp.
+original two-rank zero-action job exceeded its 32-GiB pod host-memory limit. A
+one-A100 recovery crossed 890 finite micro-steps without another OOM, then was
+archived as superseded after the bounded scaling probe below established a much
+faster layout. The original action-only job used batch 8 and exceeded an 80-GiB
+A100 during the trainable-controller forward pass; its replacement uses two
+A100s with batch 4 and accumulation 16, preserving its preregistered global
+batch of 128. Failed and superseded directories and logs remain archived with
+their reason and timestamp.
+
+The scheduling decision was measured rather than inferred from GPU names. Each
+probe ran ten optimizer updates on the full DROID pipeline with the real stage
+microbatch and global batch:
+
+| Probe | Layout | Forward throughput | Peak allocated/rank | Decision |
+| --- | --- | ---: | ---: | --- |
+| Frozen zero-action P | 4× RTX PRO 6000 Blackwell, cross-pod | 62.52 examples/s | 15,185,766,400 bytes | use for zero/shuffled controls |
+| Action-only M | 4× RTX PRO 6000 Blackwell, cross-pod | 4.72 examples/s | 63,100,719,616 bytes | reject for long trainable arm |
+| Action-only M, live reference | 2× A100 80 GB, co-located | 9.98 examples/s at micro-step 820 | 63,119,189,504 bytes | retain |
+
+The RTX action slowdown is consistent with synchronizing the multi-billion-parameter
+controller across pods, while the frozen controls synchronize
+only the 11.03M-parameter world head. This is an infrastructure scheduling result,
+not a model-speed comparison. The promoted zero and shuffled layouts each use
+four RTX ranks with batch 8 and accumulation 8, preserving the primary global
+batch of 256.
 
 ## Metrics that will decide the claim
 

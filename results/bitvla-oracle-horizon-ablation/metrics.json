@@ -1,0 +1,121 @@
+{
+  "conditions": {
+    "h8": {
+      "planning_horizon_actions": 8,
+      "candidate_count": 16,
+      "successes": 17,
+      "episodes": 20,
+      "success_rate": 0.85,
+      "per_task_successes": [5, 4, 5, 3],
+      "strict_progress_selections": 15,
+      "decisions": 788,
+      "branch_policy_calls": 0,
+      "branch_simulator_steps": 100864,
+      "control_steps": 6442,
+      "final_goal_predicates_satisfied": 42,
+      "final_goal_predicates_total": 45,
+      "sum_shard_seconds": 1907.3616831302643,
+      "max_shard_seconds": 602.953287601471,
+      "relative_branch_steps": 1.0,
+      "relative_max_shard_time": 1.0
+    },
+    "h32": {
+      "planning_horizon_actions": 32,
+      "candidate_count": 16,
+      "successes": 18,
+      "episodes": 20,
+      "success_rate": 0.9,
+      "per_task_successes": [5, 5, 5, 3],
+      "strict_progress_selections": 23,
+      "decisions": 766,
+      "branch_policy_calls": 2184,
+      "branch_simulator_steps": 377600,
+      "control_steps": 6257,
+      "final_goal_predicates_satisfied": 43,
+      "final_goal_predicates_total": 45,
+      "sum_shard_seconds": 6431.39337348938,
+      "max_shard_seconds": 2283.335604429245,
+      "relative_branch_steps": 3.7436548223350252,
+      "relative_max_shard_time": 3.786919569693834
+    },
+    "h64": {
+      "planning_horizon_actions": 64,
+      "candidate_count": 16,
+      "successes": 15,
+      "episodes": 20,
+      "success_rate": 0.75,
+      "per_task_successes": [4, 5, 5, 1],
+      "strict_progress_selections": 24,
+      "decisions": 807,
+      "branch_policy_calls": 5276,
+      "branch_simulator_steps": 778624,
+      "control_steps": 6594,
+      "final_goal_predicates_satisfied": 39,
+      "final_goal_predicates_total": 45,
+      "sum_shard_seconds": 12835.60941529274,
+      "max_shard_seconds": 4786.051142692566,
+      "relative_branch_steps": 7.719543147208122,
+      "relative_max_shard_time": 7.93768147733521
+    }
+  },
+  "paired_comparisons": {
+    "h32_minus_h8": {
+      "difference_successes": 1,
+      "difference_percentage_points": 5.0,
+      "paired_bootstrap_95_ci_percentage_points": [-10.0, 20.0],
+      "discordant_rescues": [[6, 4], [8, 2]],
+      "discordant_harms": [[8, 4]],
+      "ties": 17,
+      "exact_mcnemar_p": 1.0
+    },
+    "h64_minus_h8": {
+      "difference_successes": -2,
+      "difference_percentage_points": -10.0,
+      "paired_bootstrap_95_ci_percentage_points": [-30.0, 10.0],
+      "discordant_rescues": [[6, 4]],
+      "discordant_harms": [[0, 2], [8, 1], [8, 4]],
+      "ties": 16,
+      "exact_mcnemar_p": 0.625
+    },
+    "h64_minus_h32": {
+      "difference_successes": -3,
+      "difference_percentage_points": -15.0,
+      "paired_bootstrap_95_ci_percentage_points": [-30.0, 0.0],
+      "discordant_rescues": [],
+      "discordant_harms": [[0, 2], [8, 1], [8, 2]],
+      "ties": 17,
+      "exact_mcnemar_p": 0.25
+    }
+  },
+  "mechanistic_audit": {
+    "h32_strict_rescues_vs_h8": [
+      {
+        "task_id": 6,
+        "episode_id": 4,
+        "h8": {"success": false, "steps": 530, "strict_selections": 1},
+        "h32": {"success": true, "steps": 281, "strict_selections": 12}
+      },
+      {
+        "task_id": 8,
+        "episode_id": 2,
+        "h8": {"success": false, "steps": 530, "strict_selections": 0},
+        "h32": {"success": true, "steps": 375, "strict_selections": 1}
+      }
+    ],
+    "h32_flip_without_selection": {
+      "task_id": 8,
+      "episode_id": 4,
+      "h8_success": true,
+      "h32_success": false,
+      "strict_selections_at_both_horizons": 0
+    },
+    "h64_strict_rescues_vs_h8": [[6, 4]],
+    "h64_strict_harms_vs_h8": [[0, 2], [8, 1], [8, 4]]
+  },
+  "bootstrap": {
+    "replicates": 100000,
+    "seed": 0,
+    "unit": "paired task and initial-state index",
+    "interval": "percentile"
+  }
+}

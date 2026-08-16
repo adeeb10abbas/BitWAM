@@ -79,3 +79,8 @@ a terminal-success or remaining-steps value target over a longer horizon. The pa
 claim becomes interesting only if that value-guided selector produces a repeatable
 closed-loop gain under the same memory, power, and deadline budget. More one-chunk
 candidates with immediate predicate scoring are insufficient.
+
+That follow-up has now been run. A 32-action score horizon produced two
+candidate-associated rescues and no candidate-associated harms on the selected hard
+tasks, while 64 actions regressed. See
+[`../bitvla-oracle-horizon-ablation/REPORT.md`](../bitvla-oracle-horizon-ablation/REPORT.md).

@@ -1,0 +1,64 @@
+{
+  "run_id": "bitvla-oracle-horizon-ablation",
+  "status": "completed",
+  "date": "2026-08-16",
+  "question": "Does a longer receding-horizon candidate score improve on the eight-action best-of-16 selector?",
+  "code_revision": "254242a",
+  "config": "configs/bitvla-oracle-libero10.yaml",
+  "policy": {
+    "architecture": "native BitVLA with ternary BitWAM world head",
+    "checkpoint": "/data/users/ali/bitvla_runs/bitwam-world-posttrain--102000_chkpt",
+    "bitvla_revision": "8afac0260b3748b14657a69ec58e3d9f0d6da3a7"
+  },
+  "evaluation": {
+    "task_suite": "libero_10",
+    "selected_task_ids": [0, 6, 7, 8],
+    "selection_reason": "These tasks contained the informative failures in the preceding 50-episode best-of-K screen.",
+    "selection_timing": "Adaptive exploratory follow-up; not preregistered.",
+    "episodes_per_task": 5,
+    "total_episodes_per_horizon": 20,
+    "seed": 7,
+    "candidate_count": 16,
+    "planning_horizons_actions": [8, 32, 64],
+    "execution_horizon_actions": 8,
+    "nominal_plan": "The exact current eight-action policy chunk followed by one shared closed-loop policy continuation generated every eight simulator actions.",
+    "other_candidates": "Nested, temporally smoothed Gaussian perturbations of the nominal plan in six continuous action dimensions.",
+    "noise_scale_times_training_action_std": 0.15,
+    "gripper": "unchanged from the nominal plan",
+    "selector": "maximum exact LIBERO goal predicates satisfied at the end of the planning horizon",
+    "tie_break": "retain the earliest candidate, so equal scores retain the nominal plan",
+    "replanning": "execute the selected plan's first eight actions, observe, and plan again",
+    "isolation": "camera-free score environment and rendered nominal-planning environment in a separate spawned process",
+    "rng_control": "Python, NumPy, CPU Torch, and CUDA Torch RNG states are restored after branch-policy queries"
+  },
+  "hardware": {
+    "h8_h32_pairing": "Each task used the same physical A100-SXM4-80GB for H=8 and H=32.",
+    "h8_h32_task_to_pod": {
+      "0": "lerobot-8-ali",
+      "6": "lerobot-9-ali",
+      "7": "lerobot-11-ali",
+      "8": "lerobot-12-ali"
+    },
+    "h64_task_to_pod_and_gpu": {
+      "0": ["lerobot-13-ali", 0],
+      "6": ["lerobot-2-ali", 0],
+      "7": ["lerobot-2-ali", 1],
+      "8": ["lerobot-3-ali", 0]
+    },
+    "h64_note": "H=64 ran concurrently as a negative-control horizon and was not physically GPU-paired to H=8/H=32.",
+    "driver": "580.95.05"
+  },
+  "artifacts": {
+    "compact_metrics": "results/bitvla-oracle-horizon-ablation/metrics.json",
+    "h8_paired_results_outside_git": "/data/users/ali/bitvla_oracle/horizon-ablation/h8-paired/task{0,6}.json plus final/k16/task{7,8}.json",
+    "h32_results_outside_git": "/data/users/ali/bitvla_oracle/horizon-ablation/h32/task{0,6,7,8}.json",
+    "h64_results_outside_git": "/data/users/ali/bitvla_oracle/horizon-ablation/h64/task{0,6,7,8}.json",
+    "logs_outside_git": "/data/users/ali/bitvla_oracle/logs/horizon-ablation/"
+  },
+  "limitations": [
+    "The four tasks were selected after the preceding experiment and do not estimate overall LIBERO-10 performance.",
+    "Twenty paired episodes are insufficient to resolve a five-point success difference statistically.",
+    "The exact MuJoCo scorer diagnoses horizon utility; it does not measure learned BitWAM prediction quality or packed-runtime speed.",
+    "H=64 is paired by initial-state index but not by physical GPU."
+  ]
+}

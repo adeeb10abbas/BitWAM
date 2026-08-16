@@ -25,6 +25,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--task", default="put the black bowl on the plate")
+    parser.add_argument(
+        "--runtime",
+        choices=("upstream_dynamic", "cached_dense", "w2a8"),
+        default="upstream_dynamic",
+    )
+    parser.add_argument(
+        "--activation-backend",
+        choices=("torch", "hybrid", "triton"),
+        default="triton",
+    )
     return parser.parse_args()
 
 
@@ -80,6 +90,23 @@ def main() -> None:
         action_token_begin_idx=128011,
         stop_index=128001,
     )
+    if args.runtime == "cached_dense":
+        from lerobot_policy_bitwam.bitvla_packing import (
+            enable_cached_dense_bitlinear_runtime,
+        )
+
+        enable_cached_dense_bitlinear_runtime(model)
+    elif args.runtime == "w2a8":
+        from lerobot_policy_bitwam.bitvla_packing import (
+            enable_direct_w2a8_bitlinear_runtime,
+            pack_bitlinear_weights,
+        )
+
+        pack_bitlinear_weights(model)
+        enable_direct_w2a8_bitlinear_runtime(
+            model,
+            activation_backend=args.activation_backend,
+        )
     action_head = openvla_utils.get_action_head(cfg, model.config.text_config.hidden_size)
     proprio_projector = openvla_utils.get_proprio_projector(
         cfg, model.config.text_config.hidden_size, proprio_dim=8
@@ -113,11 +140,12 @@ def main() -> None:
         query()
         torch.cuda.synchronize()
 
-    trace_path = output_dir / "dense-native-626-prefill.trace.json"
-    table_path = output_dir / "dense-native-626-prefill.profiler-table.txt"
+    label = args.runtime.replace("_", "-")
+    trace_path = output_dir / f"{label}-626-prefill.trace.json"
+    table_path = output_dir / f"{label}-626-prefill.profiler-table.txt"
     profile.export_chrome_trace(str(trace_path))
     table_path.write_text(
-        "dense native BitVLA 626-token prefill / one timed query\n"
+        f"{args.runtime} BitVLA 626-token prefill / one timed query\n"
         + profile.key_averages().table(sort_by="self_cuda_time_total", row_limit=45)
         + "\n--- CPU ---\n"
         + profile.key_averages().table(sort_by="self_cpu_time_total", row_limit=30)

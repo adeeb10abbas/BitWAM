@@ -164,6 +164,37 @@ def _triton_direct_forward(
     )
 
 
+def _direct_w2a8_forward(
+    layer: nn.Module,
+    inputs: torch.Tensor,
+    *,
+    activation_backend: str,
+    small_batch_threshold: int,
+) -> torch.Tensor:
+    from lerobot_policy_bitwam.bitvla_packed_kernel import direct_packed_w2a8_linear
+
+    rows, columns = layer.orig_shape
+    return direct_packed_w2a8_linear(
+        inputs,
+        layer.q_weight,
+        layer.w_step,
+        layer.bias,
+        rows,
+        columns,
+        backend="triton",
+        activation_backend=activation_backend,
+        small_batch_threshold=small_batch_threshold,
+    )
+
+
+def _cached_dense_forward(layer: nn.Module, inputs: torch.Tensor) -> torch.Tensor:
+    """Run the upstream activation quantizer against a pre-quantized BF16 weight."""
+    upstream_module = sys.modules[layer.__class__.__module__]
+    if int(getattr(layer, "input_bits", 8)) == 8:
+        inputs = upstream_module.ActQuant.apply(inputs)
+    return F.linear(inputs, layer.weight, layer.bias)
+
+
 def _compiled_linear_forward(layer: nn.Module, inputs: torch.Tensor, compiled_linear: Any) -> torch.Tensor:
     upstream_module = sys.modules[layer.__class__.__module__]
     if int(getattr(layer, "input_bits", 8)) == 8:
@@ -271,6 +302,47 @@ def enable_torch_int8_bitlinear_runtime(module: nn.Module) -> int:
     return optimized_layers
 
 
+@torch.inference_mode()
+def enable_cached_dense_bitlinear_runtime(module: nn.Module, *, scope: str = "all") -> int:
+    """Cache ternary weights as BF16 for a fair optimized dense baseline.
+
+    Native BitVLA applies ``WeightQuant`` to every dense master matrix on every
+    inference call.  That is correct for training but needlessly expensive for
+    deployment.  This baseline applies the exact upstream quantizer once,
+    replaces the master value in-place with the resulting BF16 matrix, and
+    keeps activation quantization unchanged.  It therefore removes recurrent
+    weight-quantization work without receiving any of the packed runtime's
+    storage advantage.
+    """
+    optimized_layers = 0
+    for candidate in module.modules():
+        if candidate.__class__.__name__ != "BitLinear":
+            continue
+        weight = getattr(candidate, "weight", None)
+        if (
+            not isinstance(weight, torch.Tensor)
+            or int(getattr(candidate, "weight_bits", 1)) != 1
+            or not _matches_scope(candidate, scope)
+        ):
+            continue
+        upstream_module = sys.modules[candidate.__class__.__module__]
+        weight_quantizer = getattr(upstream_module, "WeightQuant", None)
+        if weight_quantizer is None or not callable(getattr(weight_quantizer, "apply", None)):
+            raise RuntimeError(
+                f"BitLinear module {candidate.__class__.__module__!r} has no WeightQuant.apply"
+            )
+        cached_weight = weight_quantizer.apply(weight).detach().contiguous()
+        if cached_weight.dtype != weight.dtype or cached_weight.shape != weight.shape:
+            raise RuntimeError("Cached dense ternary weight changed dtype or shape")
+        candidate.weight = nn.Parameter(cached_weight, requires_grad=False)
+        candidate.forward = MethodType(_cached_dense_forward, candidate)
+        candidate.cached_dense_ternary = True
+        optimized_layers += 1
+    if optimized_layers == 0:
+        raise RuntimeError("No eligible one-bit BitLinear layers were found for dense caching")
+    return optimized_layers
+
+
 def enable_triton_direct_bitlinear_runtime(
     module: nn.Module,
     *,
@@ -318,6 +390,97 @@ def enable_triton_direct_bitlinear_runtime(
     return optimized_layers
 
 
+@torch.inference_mode()
+def repack_bitlinear_weights_for_dp4a(module: nn.Module) -> int:
+    """Replace row-major two-bit buffers with equally compact DP4A buffers."""
+    from lerobot_policy_bitwam.bitvla_packed_kernel import repack_packed_ternary_for_dp4a
+
+    prepared_layers = 0
+    for candidate in module.modules():
+        if candidate.__class__.__name__ != "BitLinear":
+            continue
+        packed = getattr(candidate, "q_weight", None)
+        if not isinstance(packed, torch.Tensor):
+            continue
+        rows, columns = candidate.orig_shape
+        if columns % 16:
+            raise RuntimeError(
+                f"Direct W2A8 requires input width divisible by 16, got {candidate.orig_shape}"
+            )
+        layout = str(getattr(candidate, "packed_layout", "row_major"))
+        if layout == "row_major":
+            candidate.q_weight = repack_packed_ternary_for_dp4a(packed, rows, columns)
+            candidate.packed_layout = "dp4a"
+        elif layout != "dp4a":
+            raise RuntimeError(f"Unsupported packed BitLinear layout: {layout}")
+        prepared_layers += 1
+    if prepared_layers == 0:
+        raise RuntimeError("No packed BitLinear layers were available for DP4A repacking")
+    return prepared_layers
+
+
+@torch.inference_mode()
+def enable_direct_w2a8_bitlinear_runtime(
+    module: nn.Module,
+    *,
+    activation_backend: str = "hybrid",
+    small_batch_threshold: int = 8,
+) -> int:
+    """Enable the production direct packed W2A8 runtime.
+
+    Every eligible layer is transformed packed-to-packed into the interleaved
+    DP4A layout.  The original buffer is replaced, so storage remains exactly
+    two bits per weight.  Small token batches use the DP4A mainloop while
+    larger prompt/image batches consume the same buffer with INT8 Tensor Cores.
+    No dense BF16 or INT8 weight cache is created at setup or during forward.
+    """
+    from lerobot_policy_bitwam.bitvla_packed_kernel import (
+        triton_packed_kernel_available,
+    )
+
+    if not triton_packed_kernel_available():
+        raise RuntimeError("The direct W2A8 runtime requires Triton and CUDA")
+    if activation_backend not in {"torch", "hybrid", "triton"}:
+        raise ValueError(f"Unsupported direct activation backend: {activation_backend}")
+    if small_batch_threshold < 1:
+        raise ValueError("small_batch_threshold must be positive")
+
+    prepared_layers = repack_bitlinear_weights_for_dp4a(module)
+    optimized_layers = 0
+    for candidate in module.modules():
+        if candidate.__class__.__name__ != "BitLinear" or not bool(
+            getattr(candidate, "enable_qlora", False)
+        ):
+            continue
+        packed = getattr(candidate, "q_weight", None)
+        if not isinstance(packed, torch.Tensor):
+            continue
+        if int(getattr(candidate, "input_bits", 8)) != 8:
+            raise RuntimeError("Direct W2A8 requires eight-bit BitLinear activations")
+        layout = str(getattr(candidate, "packed_layout", "row_major"))
+        if layout != "dp4a":
+            raise RuntimeError(f"Unsupported packed BitLinear layout: {layout}")
+        candidate.w_step = candidate.w_step.to(candidate.q_weight.device)
+        candidate.forward = MethodType(
+            lambda layer,
+            inputs,
+            activation=activation_backend,
+            threshold=small_batch_threshold: _direct_w2a8_forward(
+                layer,
+                inputs,
+                activation_backend=activation,
+                small_batch_threshold=threshold,
+            ),
+            candidate,
+        )
+        optimized_layers += 1
+    if optimized_layers == 0:
+        raise RuntimeError("No packed BitLinear layers were available for direct W2A8 inference")
+    if optimized_layers != prepared_layers:
+        raise RuntimeError("DP4A repacking and runtime layer counts did not match")
+    return optimized_layers
+
+
 def _matches_scope(candidate: nn.Module, scope: str) -> bool:
     module_name = candidate.__class__.__module__
     if scope == "all":
@@ -360,6 +523,7 @@ def pack_bitlinear_weights(module: nn.Module, *, scope: str = "all") -> PackingR
         ):
             continue
 
+        original_shape = tuple(int(value) for value in weight.shape)
         original_count = weight.numel()
         original_bytes = original_count * weight.element_size()
         quantize_weights()
@@ -370,6 +534,10 @@ def pack_bitlinear_weights(module: nn.Module, *, scope: str = "all") -> PackingR
             raise RuntimeError(f"BitLinear packing produced {packed.dtype}, expected torch.uint8")
         if packed.numel() != (original_count + 3) // 4:
             raise RuntimeError("BitLinear packing did not store exactly four ternary codes per byte")
+        candidate.orig_shape = original_shape
+        candidate.n_elems = original_count
+        candidate.enable_qlora = True
+        candidate.packed_layout = "row_major"
 
         packed_layers += 1
         packed_weight_count += original_count

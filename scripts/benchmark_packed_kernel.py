@@ -13,8 +13,12 @@ import torch
 from torch.nn import functional as F
 
 from lerobot_policy_bitwam.bitvla_packed_kernel import (
+    PackedDp4aConfig,
     PackedKernelConfig,
+    direct_packed_dp4a_int8_linear,
     direct_packed_int8_linear,
+    direct_packed_w2a8_linear,
+    repack_packed_ternary_for_dp4a,
 )
 from lerobot_policy_bitwam.bitvla_packing import quantize_activation
 
@@ -47,6 +51,21 @@ def _parse_kernel_config(value: str) -> PackedKernelConfig:
     if len(fields) != 4:
         raise argparse.ArgumentTypeError("kernel config must be BLOCK_M,BLOCK_N,BLOCK_K,WARPS")
     config = PackedKernelConfig(*fields)
+    try:
+        config.validate()
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+    return config
+
+
+def _parse_dp4a_config(value: str) -> PackedDp4aConfig:
+    try:
+        fields = tuple(int(part) for part in value.lower().replace("x", ",").split(","))
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("DP4A config must be BLOCK_N,BLOCK_GROUPS,WARPS") from error
+    if len(fields) != 3:
+        raise argparse.ArgumentTypeError("DP4A config must be BLOCK_N,BLOCK_GROUPS,WARPS")
+    config = PackedDp4aConfig(*fields)
     try:
         config.validate()
     except ValueError as error:
@@ -97,21 +116,53 @@ def benchmark_shape(
     iterations: int,
     seed: int,
     kernel_config: PackedKernelConfig | None,
+    dp4a_config: PackedDp4aConfig | None,
     activation_backend: str,
     decode_mode: str,
+    kernel_family: str,
 ) -> dict[str, Any]:
     m, k, n = shape
     generator = torch.Generator(device="cuda").manual_seed(seed)
     inputs = torch.randn((m, k), device="cuda", dtype=torch.bfloat16, generator=generator)
     codes = torch.randint(-1, 2, (n, k), device="cuda", dtype=torch.int8, generator=generator)
     weight_step = torch.tensor(0.0125, device="cuda", dtype=torch.float32)
-    packed = _pack_ternary(codes)
+    row_major_packed = _pack_ternary(codes)
+    packed = (
+        repack_packed_ternary_for_dp4a(row_major_packed, n, k)
+        if kernel_family in {"auto", "dp4a"}
+        else row_major_packed
+    )
     dense_weight = (codes.float() * weight_step).to(torch.bfloat16)
 
     def dense() -> torch.Tensor:
         return F.linear(quantize_activation(inputs), dense_weight)
 
     def direct() -> torch.Tensor:
+        if kernel_family == "auto":
+            return direct_packed_w2a8_linear(
+                inputs,
+                packed,
+                weight_step,
+                None,
+                n,
+                k,
+                backend="triton",
+                dp4a_config=dp4a_config,
+                tensorcore_config=kernel_config,
+                activation_backend=activation_backend,
+            )
+        if kernel_family == "dp4a":
+            return direct_packed_dp4a_int8_linear(
+                inputs,
+                packed,
+                weight_step,
+                None,
+                n,
+                k,
+                backend="triton",
+                kernel_config=dp4a_config,
+                activation_backend=activation_backend,
+            )
         return direct_packed_int8_linear(
             inputs,
             packed,
@@ -136,16 +187,28 @@ def benchmark_shape(
     direct_summary = _summary(direct_samples)
     return {
         "shape_mkn": [m, k, n],
+        "kernel_family": kernel_family,
         "activation_backend": activation_backend,
         "decode_mode": decode_mode,
-        "kernel_config": None
-        if kernel_config is None
-        else {
-            "block_m": kernel_config.block_m,
-            "block_n": kernel_config.block_n,
-            "block_k": kernel_config.block_k,
-            "num_warps": kernel_config.num_warps,
-        },
+        "kernel_config": (
+            None
+            if kernel_config is None
+            else {
+                "block_m": kernel_config.block_m,
+                "block_n": kernel_config.block_n,
+                "block_k": kernel_config.block_k,
+                "num_warps": kernel_config.num_warps,
+            }
+        ),
+        "dp4a_config": (
+            None
+            if dp4a_config is None
+            else {
+                "block_n": dp4a_config.block_n,
+                "block_groups": dp4a_config.block_groups,
+                "num_warps": dp4a_config.num_warps,
+            }
+        ),
         "dense": dense_summary,
         "direct_w2a8": direct_summary,
         "p50_speedup": dense_summary["p50_ms"] / direct_summary["p50_ms"],
@@ -176,11 +239,23 @@ def main() -> None:
     )
     parser.add_argument("--decode-mode", choices=("scalar", "lane4"), default="scalar")
     parser.add_argument(
+        "--kernel-family",
+        choices=("auto", "tensorcore", "dp4a"),
+        default="auto",
+    )
+    parser.add_argument(
         "--kernel-config",
         action="append",
         type=_parse_kernel_config,
         dest="kernel_configs",
         help="repeat to benchmark multiple BLOCK_M,BLOCK_N,BLOCK_K,WARPS choices",
+    )
+    parser.add_argument(
+        "--dp4a-config",
+        action="append",
+        type=_parse_dp4a_config,
+        dest="dp4a_configs",
+        help="repeat to benchmark multiple BLOCK_N,BLOCK_GROUPS,WARPS choices",
     )
     parser.add_argument("--output")
     args = parser.parse_args()
@@ -202,20 +277,33 @@ def main() -> None:
             "iterations": args.iterations,
             "timing": "CUDA events; activation quantization plus projection; weights preloaded",
         },
-        "measurements": [
-            benchmark_shape(
-                shape,
-                warmup=args.warmup,
-                iterations=args.iterations,
-                seed=args.seed,
-                kernel_config=kernel_config,
-                activation_backend=args.activation_backend,
-                decode_mode=args.decode_mode,
-            )
-            for kernel_config in (args.kernel_configs or [None])
-            for shape in (args.shapes or DEFAULT_SHAPES)
-        ],
+        "measurements": [],
     }
+    if args.kernel_family == "auto":
+        configs = [
+            (tensorcore_config, dp4a_config)
+            for tensorcore_config in args.kernel_configs or [None]
+            for dp4a_config in args.dp4a_configs or [None]
+        ]
+    elif args.kernel_family == "dp4a":
+        configs = [(None, dp4a_config) for dp4a_config in args.dp4a_configs or [None]]
+    else:
+        configs = [(tensorcore_config, None) for tensorcore_config in args.kernel_configs or [None]]
+    for tensorcore_config, dp4a_config in configs:
+        for shape in args.shapes or DEFAULT_SHAPES:
+            results["measurements"].append(
+                benchmark_shape(
+                    shape,
+                    warmup=args.warmup,
+                    iterations=args.iterations,
+                    seed=args.seed,
+                    kernel_config=tensorcore_config,
+                    dp4a_config=dp4a_config,
+                    activation_backend=args.activation_backend,
+                    decode_mode=args.decode_mode,
+                    kernel_family=args.kernel_family,
+                )
+            )
     rendered = json.dumps(results, indent=2, sort_keys=True)
     if args.output:
         output = Path(args.output)

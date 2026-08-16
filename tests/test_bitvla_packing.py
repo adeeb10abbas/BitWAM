@@ -1,9 +1,12 @@
 import torch
 from torch import nn
 
+from lerobot_policy_bitwam.bitvla_packed_kernel import repack_packed_ternary_for_dp4a
 from lerobot_policy_bitwam.bitvla_packing import (
     _matches_scope,
     dequantize_packed_weight,
+    enable_cached_dense_bitlinear_runtime,
+    enable_direct_w2a8_bitlinear_runtime,
     pack_bitlinear_weights,
     packed_linear,
     quantize_activation,
@@ -25,6 +28,20 @@ class BitLinear(nn.Linear):
         packed = codes[:, 0] | codes[:, 1] << 2 | codes[:, 2] << 4 | codes[:, 3] << 6
         self.register_buffer("q_weight", packed)
         self.register_parameter("weight", None)
+
+
+class ActQuant:
+    @staticmethod
+    def apply(inputs: torch.Tensor) -> torch.Tensor:
+        return quantize_activation(inputs)
+
+
+class WeightQuant:
+    @staticmethod
+    def apply(weight: torch.Tensor) -> torch.Tensor:
+        values = weight.float()
+        step = values.abs().mean().clamp(min=1e-5)
+        return ((values / step).round().clamp(-1, 1) * step).to(weight.dtype)
 
 
 class FakePolicy(nn.Module):
@@ -139,3 +156,54 @@ def test_activation_quantization_matches_bitvla_formula() -> None:
     expected = ((values * scale).round().clamp(-128, 127) / scale).to(inputs.dtype)
 
     assert torch.equal(quantize_activation(inputs), expected)
+
+
+def test_enable_direct_w2a8_replaces_row_major_buffer_with_interleaved_layout(
+    monkeypatch,
+) -> None:
+    layer = BitLinear(16, 4)
+    layer.weight.data.copy_(
+        torch.arange(layer.weight.numel(), dtype=torch.float32)
+        .remainder(3)
+        .sub_(1)
+        .view_as(layer.weight)
+    )
+    model = nn.Sequential(layer)
+    pack_bitlinear_weights(model)
+    row_major = layer.q_weight.clone()
+    expected_interleaved = repack_packed_ternary_for_dp4a(row_major, 4, 16, backend="torch")
+    layer.orig_shape = (4, 16)
+    layer.enable_qlora = True
+    layer.input_bits = 8
+    layer.register_buffer("w_step", torch.tensor(0.25, dtype=torch.float32))
+    monkeypatch.setattr(
+        "lerobot_policy_bitwam.bitvla_packed_kernel.triton_packed_kernel_available",
+        lambda: True,
+    )
+
+    optimized = enable_direct_w2a8_bitlinear_runtime(model)
+
+    assert optimized == 1
+    assert layer.packed_layout == "dp4a"
+    assert layer.q_weight.dtype == torch.uint8
+    assert layer.q_weight.numel() == row_major.numel()
+    assert torch.equal(layer.q_weight, expected_interleaved)
+
+
+def test_cached_dense_runtime_matches_dynamic_quantization_without_reducing_storage() -> None:
+    layer = BitLinear(16, 4)
+    layer.input_bits = 8
+    inputs = torch.randn(3, 16, dtype=torch.bfloat16)
+    expected_weight = WeightQuant.apply(layer.weight)
+    expected = torch.nn.functional.linear(ActQuant.apply(inputs), expected_weight)
+    original_bytes = layer.weight.numel() * layer.weight.element_size()
+
+    optimized = enable_cached_dense_bitlinear_runtime(layer)
+    actual = layer(inputs)
+
+    assert optimized == 1
+    assert layer.cached_dense_ternary is True
+    assert layer.weight.requires_grad is False
+    assert layer.weight.numel() * layer.weight.element_size() == original_bytes
+    assert torch.equal(layer.weight, expected_weight)
+    assert torch.equal(actual, expected)

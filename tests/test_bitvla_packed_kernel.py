@@ -2,13 +2,18 @@ import pytest
 import torch
 
 from lerobot_policy_bitwam.bitvla_packed_kernel import (
+    PackedDp4aConfig,
     PackedKernelConfig,
+    _select_packed_int8_config,
     bitvla_quantize_activation_int8,
     direct_packed_bf16_linear,
+    direct_packed_dp4a_int8_linear,
     direct_packed_int8_linear,
     direct_packed_int8_linear_reference,
+    direct_packed_w2a8_linear,
     hybrid_bitvla_quantize_activation_int8,
     packed_ternary_int8_linear_reference,
+    repack_packed_ternary_for_dp4a,
     triton_bitvla_quantize_activation_int8,
     triton_packed_kernel_available,
 )
@@ -57,6 +62,112 @@ def test_packed_kernel_config_rejects_non_tensor_core_tiles() -> None:
         PackedKernelConfig(block_m=12, block_n=64, block_k=32, num_warps=4).validate()
     with pytest.raises(ValueError, match="at least 16"):
         PackedKernelConfig(block_m=8, block_n=32, block_k=8, num_warps=4).validate()
+
+
+def test_dp4a_kernel_config_rejects_invalid_reduction_tiles() -> None:
+    with pytest.raises(ValueError, match="positive power"):
+        PackedDp4aConfig(block_n=12, block_groups=32, num_warps=4).validate()
+    with pytest.raises(ValueError, match="must not exceed 64"):
+        PackedDp4aConfig(block_n=128, block_groups=32, num_warps=4).validate()
+
+
+@pytest.mark.parametrize(
+    ("tokens", "rows", "columns", "expected"),
+    [
+        (626, 6912, 2560, PackedKernelConfig(256, 64, 64, 4)),
+        (512, 1152, 4304, PackedKernelConfig(128, 64, 128, 8)),
+        (626, 2560, 2560, PackedKernelConfig(128, 128, 128, 8)),
+    ],
+)
+def test_tensorcore_dispatch_uses_tuned_decode_amortization_family(
+    tokens: int,
+    rows: int,
+    columns: int,
+    expected: PackedKernelConfig,
+) -> None:
+    assert _select_packed_int8_config(tokens, rows, columns) == expected
+
+
+def test_dp4a_repacking_is_an_exact_two_bit_involution() -> None:
+    torch.manual_seed(7)
+    rows, columns = 5, 32
+    codes = torch.randint(-1, 2, (rows, columns), dtype=torch.int8)
+    row_major = _pack_codes(codes)
+
+    interleaved = repack_packed_ternary_for_dp4a(row_major, rows, columns)
+    restored = repack_packed_ternary_for_dp4a(interleaved, rows, columns)
+
+    assert interleaved.dtype == torch.uint8
+    assert interleaved.numel() == codes.numel() // 4
+    assert torch.equal(restored, row_major)
+
+
+def test_dp4a_reference_matches_row_major_integer_projection() -> None:
+    torch.manual_seed(11)
+    rows, columns = 7, 32
+    codes = torch.randint(-1, 2, (rows, columns), dtype=torch.int8)
+    row_major = _pack_codes(codes)
+    interleaved = repack_packed_ternary_for_dp4a(row_major, rows, columns)
+    inputs = torch.randn(2, 3, columns, dtype=torch.bfloat16)
+    scale = torch.rand(rows, dtype=torch.float32)
+    bias = torch.randn(rows, dtype=torch.bfloat16)
+
+    actual = direct_packed_dp4a_int8_linear(
+        inputs,
+        interleaved,
+        scale,
+        bias,
+        rows,
+        columns,
+        backend="reference",
+    )
+    expected = direct_packed_int8_linear_reference(
+        inputs,
+        row_major,
+        scale,
+        bias,
+        rows,
+        columns,
+    )
+
+    assert torch.equal(actual, expected)
+
+
+@pytest.mark.parametrize("tokens", [2, 12])
+def test_w2a8_dispatcher_has_one_integer_reference_across_mainloops(tokens: int) -> None:
+    torch.manual_seed(13 + tokens)
+    rows, columns = 7, 32
+    codes = torch.randint(-1, 2, (rows, columns), dtype=torch.int8)
+    row_major = _pack_codes(codes)
+    interleaved = repack_packed_ternary_for_dp4a(row_major, rows, columns)
+    inputs = torch.randn(tokens, columns, dtype=torch.bfloat16)
+    scale = torch.tensor(0.25, dtype=torch.float32)
+
+    actual = direct_packed_w2a8_linear(
+        inputs,
+        interleaved,
+        scale,
+        None,
+        rows,
+        columns,
+        backend="reference",
+        small_batch_threshold=8,
+    )
+    expected = direct_packed_int8_linear_reference(
+        inputs,
+        row_major,
+        scale,
+        None,
+        rows,
+        columns,
+    )
+
+    assert torch.equal(actual, expected)
+
+
+def test_dp4a_repacking_rejects_non_word_aligned_columns() -> None:
+    with pytest.raises(ValueError, match="divisible by 16"):
+        repack_packed_ternary_for_dp4a(torch.zeros(15, dtype=torch.uint8), 3, 20)
 
 
 def test_direct_reference_matches_integer_projection_with_per_channel_scales() -> None:
@@ -173,6 +284,72 @@ def test_triton_direct_packed_kernel_matches_reference_without_weight_materializ
 
     expected = direct_packed_int8_linear(inputs, packed, scale, bias, rows, columns, backend="reference")
     actual = direct_packed_int8_linear(inputs, packed, scale, bias, rows, columns, backend="triton")
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not triton_packed_kernel_available(), reason="Triton CUDA kernel is unavailable")
+def test_triton_dp4a_kernel_matches_integer_reference_with_scale_and_bias() -> None:
+    torch.manual_seed(23)
+    rows, columns = 35, 64
+    codes = torch.randint(-1, 2, (rows, columns), dtype=torch.int8, device="cuda")
+    row_major = _pack_codes(codes)
+    interleaved = repack_packed_ternary_for_dp4a(row_major, rows, columns)
+    inputs = torch.randn(3, 2, columns, dtype=torch.bfloat16, device="cuda")
+    scale = torch.rand(rows, dtype=torch.float32, device="cuda")
+    bias = torch.randn(rows, dtype=torch.bfloat16, device="cuda")
+
+    expected = direct_packed_int8_linear_reference(
+        inputs,
+        row_major,
+        scale,
+        bias,
+        rows,
+        columns,
+    )
+    actual = direct_packed_dp4a_int8_linear(
+        inputs,
+        interleaved,
+        scale,
+        bias,
+        rows,
+        columns,
+        backend="triton",
+        activation_backend="hybrid",
+    )
+
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.skipif(not triton_packed_kernel_available(), reason="Triton CUDA kernel is unavailable")
+def test_triton_tensorcore_kernel_consumes_dp4a_layout_without_repacking() -> None:
+    torch.manual_seed(31)
+    rows, columns = 67, 64
+    codes = torch.randint(-1, 2, (rows, columns), dtype=torch.int8, device="cuda")
+    row_major = _pack_codes(codes)
+    interleaved = repack_packed_ternary_for_dp4a(row_major, rows, columns)
+    inputs = torch.randn(17, columns, dtype=torch.bfloat16, device="cuda")
+    scale = torch.tensor(0.125, dtype=torch.float32, device="cuda")
+
+    expected = direct_packed_int8_linear_reference(
+        inputs,
+        row_major,
+        scale,
+        None,
+        rows,
+        columns,
+    )
+    actual = direct_packed_w2a8_linear(
+        inputs,
+        interleaved,
+        scale,
+        None,
+        rows,
+        columns,
+        backend="triton",
+        activation_backend="hybrid",
+        small_batch_threshold=8,
+    )
 
     torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 

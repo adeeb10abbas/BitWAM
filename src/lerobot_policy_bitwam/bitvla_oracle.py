@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing as mp
 import os
-import random
 import time
 from collections import deque
 from collections.abc import Sequence
+from contextlib import suppress
+from multiprocessing.connection import Connection
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import numpy as np
-import torch
 
 from lerobot_policy_bitwam.bitvla_evaluate import _load_upstream_evaluator
 from lerobot_policy_bitwam.workflows import load_config
@@ -67,20 +69,6 @@ def _restore(env: Any, state: np.ndarray, timestep: int) -> Any:
     return obs
 
 
-def _capture_rng_state() -> tuple[Any, Any, torch.Tensor, list[torch.Tensor] | None]:
-    cuda_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
-    return random.getstate(), np.random.get_state(), torch.random.get_rng_state(), cuda_state
-
-
-def _restore_rng_state(state: tuple[Any, Any, torch.Tensor, list[torch.Tensor] | None]) -> None:
-    python_state, numpy_state, torch_state, cuda_state = state
-    random.setstate(python_state)
-    np.random.set_state(numpy_state)
-    torch.random.set_rng_state(torch_state)
-    if cuda_state is not None:
-        torch.cuda.set_rng_state_all(cuda_state)
-
-
 def _evaluate_candidate(env: Any, evaluator: Any, cfg: Any, actions: np.ndarray) -> tuple[int, bool]:
     success = False
     for action in actions:
@@ -95,12 +83,65 @@ def _evaluate_candidate(env: Any, evaluator: Any, cfg: Any, actions: np.ndarray)
     return progress, success
 
 
+def _branch_worker(config: dict[str, Any], task_id: int, connection: Connection) -> None:
+    """Own the branch simulator in another process so it cannot mutate control globals."""
+    env = None
+    try:
+        evaluator = _load_upstream_evaluator(config)
+        cfg = SimpleNamespace(model_family="bitnet")
+        task_suite_name = str(config.get("task_suite_name", "libero_10"))
+        task_suite = evaluator.benchmark.get_benchmark_dict()[task_suite_name]()
+        task = task_suite.get_task(task_id)
+        env = evaluator.get_libero_env(task, cfg.model_family, resolution=256)[0]
+        connection.send({"ready": True})
+        while True:
+            payload = connection.recv()
+            if payload is None:
+                break
+            state, timestep, candidates = payload
+            scores = []
+            for candidate in candidates:
+                _restore(env, state, timestep)
+                score, _ = _evaluate_candidate(env, evaluator, cfg, candidate)
+                scores.append(score)
+            connection.send(scores)
+    except BaseException as exc:
+        with suppress(BrokenPipeError, EOFError):
+            connection.send({"error": f"{type(exc).__name__}: {exc}"})
+        raise
+    finally:
+        if env is not None:
+            env.close()
+        connection.close()
+
+
+def _start_branch_worker(config: dict[str, Any], task_id: int) -> tuple[mp.Process, Connection]:
+    context = mp.get_context("spawn")
+    parent_connection, child_connection = context.Pipe()
+    process = context.Process(
+        target=_branch_worker,
+        args=(config, task_id, child_connection),
+        daemon=True,
+    )
+    process.start()
+    child_connection.close()
+    if not parent_connection.poll(180):
+        process.terminate()
+        process.join(10)
+        raise RuntimeError("Timed out starting isolated LIBERO branch simulator")
+    ready = parent_connection.recv()
+    if ready != {"ready": True}:
+        process.join(10)
+        raise RuntimeError(f"Isolated LIBERO branch simulator failed: {ready}")
+    return process, parent_connection
+
+
 def run_episode(
     *,
     evaluator: Any,
     cfg: Any,
     env: Any,
-    branch_env: Any | None,
+    branch_connection: Connection | None,
     task_description: str,
     model: Any,
     resize_size: Any,
@@ -117,10 +158,6 @@ def run_episode(
     """Run one paired oracle episode; ties always retain the base policy action."""
     env.reset()
     obs = env.set_init_state(initial_state)
-    if branch_env is not None:
-        rng_state = _capture_rng_state()
-        branch_env.reset()
-        _restore_rng_state(rng_state)
     action_queue: deque[np.ndarray] = deque(maxlen=cfg.num_open_loop_steps)
     max_steps = evaluator.TASK_MAX_STEPS[cfg.task_suite_name]
     action_std = np.asarray(action_stats["std"], dtype=np.float32)
@@ -173,18 +210,15 @@ def run_episode(
             )
             state = env.get_sim_state().copy()
             timestep = int(env.env.timestep)
-            scores: list[int] = []
-            if branch_env is None:
+            if branch_connection is None:
                 raise RuntimeError("Multiple candidates require an isolated branch environment")
-            rng_state = _capture_rng_state()
-            try:
-                for candidate in candidates:
-                    _restore(branch_env, state, timestep)
-                    score, _ = _evaluate_candidate(branch_env, evaluator, cfg, candidate)
-                    scores.append(score)
-                    branch_steps += len(candidate)
-            finally:
-                _restore_rng_state(rng_state)
+            branch_connection.send((state, timestep, candidates))
+            if not branch_connection.poll(180):
+                raise RuntimeError("Timed out waiting for isolated branch scores")
+            scores = branch_connection.recv()
+            if isinstance(scores, dict) and "error" in scores:
+                raise RuntimeError(f"Isolated branch simulator failed: {scores['error']}")
+            branch_steps += len(candidates) * len(base_actions)
             selected = int(np.argmax(scores))
             if selected:
                 nonbase_wins += 1
@@ -251,17 +285,10 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         task = task_suite.get_task(task_id)
         initial_states = task_suite.get_task_init_states(task_id)
         env, description = evaluator.get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
-        branch_env = None
+        branch_process = None
+        branch_connection = None
         if candidate_count > 1:
-            rng_state = _capture_rng_state()
-            try:
-                branch_env = evaluator.get_libero_env(
-                    task,
-                    cfg.model_family,
-                    resolution=cfg.env_img_res,
-                )[0]
-            finally:
-                _restore_rng_state(rng_state)
+            branch_process, branch_connection = _start_branch_worker(config, task_id)
         try:
             for episode_id in range(trials):
                 episode_rng = np.random.default_rng(
@@ -271,7 +298,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                     evaluator=evaluator,
                     cfg=cfg,
                     env=env,
-                    branch_env=branch_env,
+                    branch_connection=branch_connection,
                     task_description=description,
                     model=model,
                     resize_size=resize_size,
@@ -290,8 +317,15 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                 print("ORACLE_EPISODE " + json.dumps(result, sort_keys=True), flush=True)
         finally:
             env.close()
-            if branch_env is not None:
-                branch_env.close()
+            if branch_connection is not None:
+                with suppress(BrokenPipeError, EOFError):
+                    branch_connection.send(None)
+                branch_connection.close()
+            if branch_process is not None:
+                branch_process.join(10)
+                if branch_process.is_alive():
+                    branch_process.terminate()
+                    branch_process.join(10)
 
     successes = sum(int(item["success"]) for item in episodes)
     summary = {

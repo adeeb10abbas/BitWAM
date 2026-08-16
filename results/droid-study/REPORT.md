@@ -15,9 +15,9 @@ the model interfaces permit it.
 | --- | --- | --- | --- | --- | --- |
 | BitWAM staged | 20k frozen-head | 5k joint | 2k joint/ternary | observed | P running on 4× B200 |
 | BitWAM no-M | 20k frozen-head | none | 2k joint/ternary | observed | pending |
-| Visual-only control | 20k frozen-head | none | matched downstream | zero | pending |
+| Visual-only control | 20k frozen-head | none | matched downstream | zero | P running on 1× A100 |
 | Shuffled-action control | 20k frozen-head | none | none | within-rank permutation | pending |
-| Action-only control | none | 5k action | 2k action | loss weight zero | pending |
+| Action-only control | none | 5k action | 2k action | loss weight zero | M running on 2× A100 |
 | Released BitVLA | none | none | none | none | existing reference |
 
 Seed 0 is a promotion gate. Three training seeds and the larger rollout tier are
@@ -34,6 +34,7 @@ stage definitions are preregistered in `docs/DROID_STUDY.md`.
 | Full train statistics | 94,701 trajectories; 27,358,560 transitions; deterministic `train[:99%]`, cache keyed by split | passed |
 | Full-release gradient | two finite optimizer steps on one B200; config revision `c8644d4` | passed |
 | Full-release Stage-P start | four synchronized B200 ranks; finite metric row at micro-step 10; config revision `821b1bf` | passed |
+| Held-out normalization reuse | 100 finite updates on `train[99%:]` with pinned train statistics; config revision `758dabf` | passed |
 
 The full-release manifest is archived as
 `results/droid-study/droid-full-download-manifest.json` with SHA-256
@@ -78,6 +79,26 @@ and peak rank-0 CUDA allocation/reservation of 15,112,216,064 and
 22,951,231,488 bytes. At micro-step 730, forward throughput had warmed to
 97.53 examples/s and the cgroup still recorded zero OOM events. These are live
 training diagnostics, not final quality measurements.
+
+The first holdout-normalization implementation inserted the pinned statistics
+into OXE dataset kwargs. Upstream later expanded those kwargs next to its own
+explicit `dataset_statistics` argument, so the run failed before iteration.
+Revision `758dabf` supplies the pinned record through the upstream statistics
+function instead and preserves its two-pass dataset construction. The fixed
+initialization holdout completed all 100 updates with ten finite metric rows. Its
+final future cosine was 0.019061, world loss 0.980939, conditioning gap
+`3.85e-5`, action L1 0.338535, throughput 7.25 examples/s, and rank-0 peak CUDA
+allocation 15,044,786,688 bytes.
+
+Two control-launch resource failures are also excluded rather than hidden. The
+original two-rank zero-action job exceeded its 32-GiB pod host-memory limit; its
+replacement uses one A100 with batch 8 and accumulation 32, preserving Stage
+P's global batch of 256. The original action-only job used batch 8 and exceeded
+an 80-GiB A100 during the trainable-controller forward pass; its replacement
+uses two A100s with batch 4 and accumulation 16, preserving its preregistered
+global batch of 128. Both replacements have crossed 80 real micro-steps with
+finite metrics. Failed directories and logs remain archived with their failure
+class and timestamp.
 
 ## Metrics that will decide the claim
 

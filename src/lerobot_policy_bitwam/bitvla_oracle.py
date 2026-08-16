@@ -84,7 +84,7 @@ def run_episode(
     evaluator: Any,
     cfg: Any,
     env: Any,
-    branch_envs: Sequence[Any],
+    branch_env: Any,
     task_description: str,
     model: Any,
     resize_size: Any,
@@ -101,8 +101,7 @@ def run_episode(
     """Run one paired oracle episode; ties always retain the base policy action."""
     env.reset()
     obs = env.set_init_state(initial_state)
-    for branch_env in branch_envs:
-        branch_env.reset()
+    branch_env.reset()
     action_queue: deque[np.ndarray] = deque(maxlen=cfg.num_open_loop_steps)
     max_steps = evaluator.TASK_MAX_STEPS[cfg.task_suite_name]
     action_std = np.asarray(action_stats["std"], dtype=np.float32)
@@ -152,7 +151,7 @@ def run_episode(
             state = env.get_sim_state().copy()
             timestep = int(env.env.timestep)
             scores: list[int] = []
-            for branch_env, candidate in zip(branch_envs, candidates, strict=True):
+            for candidate in candidates:
                 _restore(branch_env, state, timestep)
                 score, _ = _evaluate_candidate(branch_env, evaluator, cfg, candidate)
                 scores.append(score)
@@ -223,10 +222,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         task = task_suite.get_task(task_id)
         initial_states = task_suite.get_task_init_states(task_id)
         env, description = evaluator.get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
-        branch_envs = [
-            evaluator.get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)[0]
-            for _ in range(candidate_count)
-        ]
+        branch_env = evaluator.get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)[0]
         try:
             for episode_id in range(trials):
                 episode_rng = np.random.default_rng(
@@ -236,7 +232,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                     evaluator=evaluator,
                     cfg=cfg,
                     env=env,
-                    branch_envs=branch_envs,
+                    branch_env=branch_env,
                     task_description=description,
                     model=model,
                     resize_size=resize_size,
@@ -255,8 +251,7 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                 print("ORACLE_EPISODE " + json.dumps(result, sort_keys=True), flush=True)
         finally:
             env.close()
-            for branch_env in branch_envs:
-                branch_env.close()
+            branch_env.close()
 
     successes = sum(int(item["success"]) for item in episodes)
     summary = {

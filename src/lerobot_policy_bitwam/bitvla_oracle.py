@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 import time
 from collections import deque
 from collections.abc import Sequence
@@ -12,6 +13,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import torch
 
 from lerobot_policy_bitwam.bitvla_evaluate import _load_upstream_evaluator
 from lerobot_policy_bitwam.workflows import load_config
@@ -65,6 +67,20 @@ def _restore(env: Any, state: np.ndarray, timestep: int) -> Any:
     return obs
 
 
+def _capture_rng_state() -> tuple[Any, Any, torch.Tensor, list[torch.Tensor] | None]:
+    cuda_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    return random.getstate(), np.random.get_state(), torch.random.get_rng_state(), cuda_state
+
+
+def _restore_rng_state(state: tuple[Any, Any, torch.Tensor, list[torch.Tensor] | None]) -> None:
+    python_state, numpy_state, torch_state, cuda_state = state
+    random.setstate(python_state)
+    np.random.set_state(numpy_state)
+    torch.random.set_rng_state(torch_state)
+    if cuda_state is not None:
+        torch.cuda.set_rng_state_all(cuda_state)
+
+
 def _evaluate_candidate(env: Any, evaluator: Any, cfg: Any, actions: np.ndarray) -> tuple[int, bool]:
     success = False
     for action in actions:
@@ -84,7 +100,7 @@ def run_episode(
     evaluator: Any,
     cfg: Any,
     env: Any,
-    branch_env: Any,
+    branch_env: Any | None,
     task_description: str,
     model: Any,
     resize_size: Any,
@@ -101,7 +117,10 @@ def run_episode(
     """Run one paired oracle episode; ties always retain the base policy action."""
     env.reset()
     obs = env.set_init_state(initial_state)
-    branch_env.reset()
+    if branch_env is not None:
+        rng_state = _capture_rng_state()
+        branch_env.reset()
+        _restore_rng_state(rng_state)
     action_queue: deque[np.ndarray] = deque(maxlen=cfg.num_open_loop_steps)
     max_steps = evaluator.TASK_MAX_STEPS[cfg.task_suite_name]
     action_std = np.asarray(action_stats["std"], dtype=np.float32)
@@ -139,6 +158,10 @@ def run_episode(
                 ),
                 dtype=np.float32,
             )
+            if candidate_count == 1:
+                action_queue.extend(base_actions)
+                decisions += 1
+                continue
             candidates = make_action_candidates(
                 base_actions,
                 count=candidate_count,
@@ -151,11 +174,17 @@ def run_episode(
             state = env.get_sim_state().copy()
             timestep = int(env.env.timestep)
             scores: list[int] = []
-            for candidate in candidates:
-                _restore(branch_env, state, timestep)
-                score, _ = _evaluate_candidate(branch_env, evaluator, cfg, candidate)
-                scores.append(score)
-                branch_steps += len(candidate)
+            if branch_env is None:
+                raise RuntimeError("Multiple candidates require an isolated branch environment")
+            rng_state = _capture_rng_state()
+            try:
+                for candidate in candidates:
+                    _restore(branch_env, state, timestep)
+                    score, _ = _evaluate_candidate(branch_env, evaluator, cfg, candidate)
+                    scores.append(score)
+                    branch_steps += len(candidate)
+            finally:
+                _restore_rng_state(rng_state)
             selected = int(np.argmax(scores))
             if selected:
                 nonbase_wins += 1
@@ -222,7 +251,17 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
         task = task_suite.get_task(task_id)
         initial_states = task_suite.get_task_init_states(task_id)
         env, description = evaluator.get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)
-        branch_env = evaluator.get_libero_env(task, cfg.model_family, resolution=cfg.env_img_res)[0]
+        branch_env = None
+        if candidate_count > 1:
+            rng_state = _capture_rng_state()
+            try:
+                branch_env = evaluator.get_libero_env(
+                    task,
+                    cfg.model_family,
+                    resolution=cfg.env_img_res,
+                )[0]
+            finally:
+                _restore_rng_state(rng_state)
         try:
             for episode_id in range(trials):
                 episode_rng = np.random.default_rng(
@@ -251,7 +290,8 @@ def run(config: dict[str, Any]) -> dict[str, Any]:
                 print("ORACLE_EPISODE " + json.dumps(result, sort_keys=True), flush=True)
         finally:
             env.close()
-            branch_env.close()
+            if branch_env is not None:
+                branch_env.close()
 
     successes = sum(int(item["success"]) for item in episodes)
     summary = {

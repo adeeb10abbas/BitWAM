@@ -92,7 +92,21 @@ def _branch_worker(config: dict[str, Any], task_id: int, connection: Connection)
         task_suite_name = str(config.get("task_suite_name", "libero_10"))
         task_suite = evaluator.benchmark.get_benchmark_dict()[task_suite_name]()
         task = task_suite.get_task(task_id)
-        env = evaluator.get_libero_env(task, cfg.model_family, resolution=256)[0]
+        from libero.libero import get_libero_path
+        from libero.libero.envs.env_wrapper import ControlEnv
+
+        task_bddl_file = os.path.join(
+            get_libero_path("bddl_files"),
+            task.problem_folder,
+            task.bddl_file,
+        )
+        # Branch scoring needs physics and predicates, not camera observations.
+        env = ControlEnv(
+            bddl_file_name=task_bddl_file,
+            use_camera_obs=False,
+            has_offscreen_renderer=False,
+        )
+        env.seed(0)
         connection.send({"ready": True})
         while True:
             payload = connection.recv()
